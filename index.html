@@ -6,819 +6,213 @@
 <title>はなびARあそび</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
-:root{
-  --bg:#06001a;
-  --panel:#0f0028;
-  --gold:#ffcc44;
-  --gold2:#ff8800;
-  --text:#fff;
-  --muted:rgba(255,255,255,0.5);
-  --border:rgba(255,255,255,0.12);
-  --btn-r:16px;
-}
-body{
-  font-family:'Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif;
-  background:var(--bg);
-  color:var(--text);
-  height:100dvh;
-  overflow:hidden;
-  display:flex;
-  flex-direction:column;
-}
-
-/* ── スクリーン管理 ── */
-.screen{display:none;flex-direction:column;height:100dvh;overflow:hidden;}
+body{font-family:'Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif;background:#06001a;color:#fff;height:100dvh;overflow:hidden;}
+.screen{display:none;flex-direction:column;height:100dvh;align-items:center;justify-content:center;padding:24px;}
 .screen.active{display:flex;}
-
-/* ── 共通ヘッダー ── */
-.header{
-  padding:14px 16px 10px;
-  display:flex;align-items:center;gap:10px;
-  background:linear-gradient(180deg,rgba(6,0,26,0.95) 0%,transparent 100%);
-  flex-shrink:0;
-}
-.header-back{
-  width:32px;height:32px;border-radius:50%;
-  border:1px solid var(--border);
-  background:rgba(255,255,255,0.06);
-  display:flex;align-items:center;justify-content:center;
-  font-size:16px;cursor:pointer;flex-shrink:0;
-}
-.header-title{font-size:15px;font-weight:700;color:var(--gold);}
-.header-sub{font-size:10px;color:var(--muted);margin-top:2px;}
-.step-dots{
-  margin-left:auto;display:flex;gap:5px;
-}
-.step-dot{
-  width:6px;height:6px;border-radius:50%;
-  background:var(--border);transition:all 0.3s;
-}
-.step-dot.active{background:var(--gold);width:18px;border-radius:3px;}
-.step-dot.done{background:rgba(255,200,60,0.4);}
-
-/* ══════════════════════════
-   画面1：スプラッシュ
-══════════════════════════ */
-#screen-splash{
-  align-items:center;justify-content:center;
-  background:radial-gradient(ellipse at 50% 40%,#1a0035 0%,#06001a 70%);
-}
-.splash-stars{position:absolute;inset:0;pointer-events:none;}
-.splash-star{
-  position:absolute;width:2px;height:2px;border-radius:50%;
-  background:#fff;animation:twinkle var(--d,3s) var(--delay,0s) ease-in-out infinite;
-}
-@keyframes twinkle{0%,100%{opacity:0.2;}50%{opacity:0.9;}}
-.splash-emoji{font-size:72px;animation:float 3s ease-in-out infinite;margin-bottom:20px;}
+#screen-top{background:radial-gradient(ellipse at 50% 40%,#1a0035 0%,#06001a 70%);}
+.top-emoji{font-size:64px;animation:float 3s ease-in-out infinite;margin-bottom:16px;}
 @keyframes float{0%,100%{transform:translateY(0);}50%{transform:translateY(-10px);}}
-.splash-title{
-  font-size:28px;font-weight:900;
-  background:linear-gradient(135deg,var(--gold),var(--gold2));
-  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
-  text-align:center;line-height:1.3;margin-bottom:10px;
-}
-.splash-desc{
-  font-size:13px;color:var(--muted);text-align:center;
-  line-height:1.9;margin-bottom:32px;
-}
-.splash-btn{
-  padding:16px 48px;border:none;border-radius:32px;
-  background:linear-gradient(135deg,#ff6b00,#ffcc00);
-  color:#000;font-size:17px;font-weight:900;
-  letter-spacing:0.08em;cursor:pointer;
-  box-shadow:0 0 40px rgba(255,150,0,0.4);
-  animation:pulse-btn 2s ease-in-out infinite;
-}
-@keyframes pulse-btn{
-  0%,100%{box-shadow:0 0 20px rgba(255,150,0,0.3);}
-  50%{box-shadow:0 0 50px rgba(255,150,0,0.7);}
-}
+.top-title{font-size:28px;font-weight:900;text-align:center;line-height:1.3;margin-bottom:12px;background:linear-gradient(135deg,#ffcc44,#ff8800);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.top-desc{font-size:13px;color:rgba(255,255,255,0.5);text-align:center;line-height:2;margin-bottom:32px;}
+.upload-box{width:100%;max-width:320px;border:2px dashed rgba(100,180,255,0.5);border-radius:20px;padding:32px 24px;text-align:center;cursor:pointer;background:rgba(100,180,255,0.06);transition:all 0.2s;margin-bottom:16px;}
+.upload-box .icon{font-size:48px;margin-bottom:12px;}
+.upload-box .label{font-size:15px;color:rgba(255,255,255,0.8);margin-bottom:6px;}
+.upload-box .sub{font-size:11px;color:rgba(255,255,255,0.35);}
+.upload-box.selected{border-color:rgba(100,255,150,0.6);background:rgba(100,255,150,0.08);}
+.upload-box.selected .label{color:#88ffaa;}
+.start-btn{width:100%;max-width:320px;padding:16px;border:none;border-radius:16px;background:linear-gradient(135deg,#ff6b00,#ffcc00);color:#000;font-size:16px;font-weight:900;cursor:pointer;display:none;}
+.start-btn.show{display:block;}
 
-/* ══════════════════════════
-   画面2：キャラ作成
-══════════════════════════ */
-#screen-create{background:var(--bg);}
-.create-body{flex:1;overflow-y:auto;padding:12px 16px 24px;}
-
-.preview-box{
-  width:100%;aspect-ratio:1;max-width:220px;
-  margin:0 auto 20px;
-  background:var(--panel);
-  border:1px solid var(--border);
-  border-radius:24px;
-  display:flex;align-items:center;justify-content:center;
-  position:relative;overflow:hidden;
-}
-.preview-canvas-wrap{
-  width:160px;height:160px;position:relative;
-}
-#previewCanvas{width:160px;height:160px;}
-.preview-label{
-  position:absolute;bottom:10px;left:0;right:0;
-  text-align:center;font-size:10px;color:var(--muted);
-}
-
-.parts-section{margin-bottom:20px;}
-.parts-title{
-  font-size:11px;color:var(--muted);
-  letter-spacing:0.1em;margin-bottom:10px;
-  display:flex;align-items:center;gap:6px;
-}
-.parts-title::after{content:'';flex:1;height:1px;background:var(--border);}
-
-.parts-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
-.part-btn{
-  aspect-ratio:1;border-radius:12px;
-  border:1.5px solid var(--border);
-  background:var(--panel);
-  display:flex;align-items:center;justify-content:center;
-  font-size:28px;cursor:pointer;
-  transition:all 0.15s;
-  -webkit-tap-highlight-color:transparent;
-}
-.part-btn:active{transform:scale(0.92);}
-.part-btn.selected{
-  border-color:var(--gold);
-  background:rgba(255,200,60,0.1);
-  box-shadow:0 0 12px rgba(255,200,60,0.3);
-}
-
-.color-section{margin-bottom:20px;}
-.color-row{display:flex;gap:8px;flex-wrap:wrap;}
-.color-dot{
-  width:36px;height:36px;border-radius:50%;
-  border:2px solid transparent;cursor:pointer;
-  transition:all 0.15s;flex-shrink:0;
-}
-.color-dot.selected{border-color:#fff;transform:scale(1.15);}
-
-.name-section{margin-bottom:20px;}
-.name-input{
-  width:100%;padding:12px 16px;
-  background:var(--panel);
-  border:1px solid var(--border);
-  border-radius:12px;
-  color:var(--text);font-size:15px;
-  outline:none;
-  font-family:inherit;
-}
-.name-input::placeholder{color:var(--muted);}
-.name-input:focus{border-color:rgba(255,200,60,0.4);}
-
-.next-btn{
-  width:100%;padding:15px;border:none;
-  border-radius:var(--btn-r);
-  background:linear-gradient(135deg,#ff6b00,#ffcc00);
-  color:#000;font-size:16px;font-weight:900;
-  cursor:pointer;letter-spacing:0.06em;
-  transition:all 0.15s;
-}
-.next-btn:active{transform:scale(0.97);}
-
-/* ══════════════════════════
-   画面3：AR表示
-══════════════════════════ */
-#screen-ar{position:relative;background:#000;}
-#arVideo{
-  position:absolute;inset:0;
-  width:100%;height:100%;
-  object-fit:cover;
-}
-#arCanvas{
-  position:absolute;inset:0;
-  width:100%;height:100%;
-  pointer-events:none;
-}
-.ar-ui{
-  position:absolute;inset:0;
-  display:flex;flex-direction:column;
-  pointer-events:none;
-}
-.ar-header{
-  padding:14px 16px 10px;
-  background:linear-gradient(180deg,rgba(0,0,0,0.7) 0%,transparent 100%);
-  display:flex;align-items:center;gap:10px;
-  pointer-events:all;
-}
-.ar-back{
-  width:36px;height:36px;border-radius:50%;
-  border:1px solid rgba(255,255,255,0.3);
-  background:rgba(0,0,0,0.4);
-  display:flex;align-items:center;justify-content:center;
-  font-size:18px;cursor:pointer;
-  backdrop-filter:blur(4px);
-}
-.ar-title-wrap .ar-title{font-size:14px;font-weight:700;color:var(--gold);}
-.ar-title-wrap .ar-sub{font-size:10px;color:rgba(255,255,255,0.6);margin-top:1px;}
-
-.ar-center{
-  flex:1;display:flex;align-items:center;justify-content:center;
-  flex-direction:column;gap:12px;
-}
-.ar-compass{
-  width:80px;height:80px;border-radius:50%;
-  border:1.5px solid rgba(255,200,60,0.4);
-  background:rgba(0,0,0,0.5);
-  backdrop-filter:blur(6px);
-  display:flex;align-items:center;justify-content:center;
-  flex-direction:column;gap:2px;
-  transition:all 0.3s;
-}
-.ar-compass.aimed{
-  border-color:rgba(100,255,150,0.7);
-  box-shadow:0 0 20px rgba(100,255,150,0.3);
-}
-.ar-compass-arrow{font-size:28px;transition:transform 0.3s;}
-.ar-compass-label{font-size:9px;color:var(--muted);}
-
-.ar-hint{
-  padding:8px 20px;
-  background:rgba(0,0,0,0.6);
-  border:1px solid rgba(255,255,255,0.15);
-  border-radius:20px;
-  font-size:12px;color:rgba(255,255,255,0.8);
-  backdrop-filter:blur(6px);
-  text-align:center;
-  transition:all 0.4s;
-}
-.ar-hint.aimed{
-  border-color:rgba(100,255,150,0.4);
-  color:#88ffaa;
-  background:rgba(0,40,20,0.6);
-}
-
-.ar-bottom{
-  padding:16px 16px 32px;
-  background:linear-gradient(0deg,rgba(0,0,0,0.7) 0%,transparent 100%);
-  display:flex;gap:10px;
-  pointer-events:all;
-}
-.ar-bottom-btn{
-  flex:1;padding:12px 8px;
-  border-radius:14px;
-  border:1px solid rgba(255,255,255,0.2);
-  background:rgba(0,0,0,0.5);
-  color:#fff;font-size:12px;text-align:center;
-  cursor:pointer;backdrop-filter:blur(6px);
-  transition:all 0.15s;
-}
-.ar-bottom-btn:active{background:rgba(255,200,60,0.2);}
-.ar-bottom-btn .btn-icon{font-size:20px;display:block;margin-bottom:4px;}
-.ar-bottom-btn.primary{
-  background:rgba(255,100,0,0.4);
-  border-color:rgba(255,150,0,0.5);
-}
-
-/* 管理者設定モーダル */
-.modal-overlay{
-  position:fixed;inset:0;
-  background:rgba(0,0,0,0.85);
-  z-index:500;
-  display:none;align-items:center;justify-content:center;
-  padding:24px;
-}
-.modal-overlay.show{display:flex;}
-.modal-box{
-  background:#0f0028;
-  border:1px solid rgba(255,200,60,0.3);
-  border-radius:20px;
-  padding:24px;width:100%;max-width:320px;
-}
-.modal-title{font-size:15px;color:var(--gold);font-weight:700;margin-bottom:16px;}
-.modal-row{margin-bottom:14px;}
-.modal-label{font-size:11px;color:var(--muted);margin-bottom:6px;}
-.modal-input{
-  width:100%;padding:10px 14px;
-  background:rgba(255,255,255,0.06);
-  border:1px solid var(--border);border-radius:10px;
-  color:#fff;font-size:14px;outline:none;font-family:inherit;
-}
-.modal-input:focus{border-color:rgba(255,200,60,0.4);}
-.modal-btns{display:flex;gap:8px;margin-top:20px;}
-.modal-cancel{
-  flex:1;padding:11px;border-radius:12px;
-  border:1px solid var(--border);background:transparent;
-  color:var(--muted);font-size:13px;cursor:pointer;
-}
-.modal-ok{
-  flex:2;padding:11px;border-radius:12px;
-  border:none;background:linear-gradient(135deg,#ff6b00,#ffcc00);
-  color:#000;font-size:13px;font-weight:700;cursor:pointer;
-}
-
-/* キャラ表示オーバーレイ */
-#charOverlay{
-  position:absolute;
-  pointer-events:none;
-  transition:opacity 0.4s;
-}
-.char-bubble{
-  position:relative;
-  display:flex;flex-direction:column;align-items:center;gap:4px;
-}
-.char-name-tag{
-  background:rgba(0,0,0,0.7);
-  border:1px solid rgba(255,200,60,0.4);
-  border-radius:20px;padding:3px 12px;
-  font-size:11px;color:var(--gold);
-  backdrop-filter:blur(4px);
-  white-space:nowrap;
-}
+/* AR画面 */
+#screen-ar{display:none;position:fixed;inset:0;background:#000;}
+#screen-ar.active{display:block;}
+#arVideo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:1;}
+#arCanvas{position:absolute;inset:0;width:100%;height:100%;z-index:2;pointer-events:none;}
+.ar-ui{position:fixed;inset:0;z-index:10;display:flex;flex-direction:column;pointer-events:none;}
+.ar-header{padding:14px 16px 10px;background:linear-gradient(180deg,rgba(0,0,0,0.75) 0%,transparent 100%);display:flex;align-items:center;gap:10px;pointer-events:all;}
+.ar-back{width:36px;height:36px;border-radius:50%;border:1px solid rgba(255,255,255,0.3);background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;}
+.ar-title{font-size:14px;font-weight:700;color:#ffcc44;}
+.ar-sub{font-size:10px;color:rgba(255,255,255,0.5);margin-top:2px;}
+.ar-status{margin:auto auto 0;padding:8px 20px;background:rgba(0,0,0,0.6);border:1px solid rgba(255,255,255,0.15);border-radius:20px;font-size:12px;color:rgba(255,255,255,0.8);text-align:center;transition:all 0.4s;}
+.ar-status.found{border-color:rgba(100,255,150,0.5);color:#88ffaa;background:rgba(0,40,20,0.7);}
+.ar-bottom{padding:12px 16px 28px;background:linear-gradient(0deg,rgba(0,0,0,0.75) 0%,transparent 100%);display:flex;gap:8px;pointer-events:all;}
+.ar-btn{flex:1;padding:11px 8px;border-radius:14px;border:1px solid rgba(255,255,255,0.2);background:rgba(0,0,0,0.5);color:#fff;font-size:11px;text-align:center;cursor:pointer;}
+.ar-btn .bi{font-size:20px;display:block;margin-bottom:3px;}
 </style>
 </head>
 <body>
 
-<!-- ══ 画面1：スプラッシュ ══ -->
-<div class="screen active" id="screen-splash">
-  <div class="splash-stars" id="splashStars"></div>
-  <div class="splash-emoji">🎆</div>
-  <div class="splash-title">はなびAR<br>あそび</div>
-  <div class="splash-desc">
-    じぶんだけのキャラクターを作って<br>
-    花火の空に浮かべよう！
+<!-- トップ画面 -->
+<div class="screen active" id="screen-top">
+  <div class="top-emoji">🎆</div>
+  <div class="top-title">はなびAR<br>あそび</div>
+  <div class="top-desc">GLBファイルを選んで<br>マーカーの上に3Dモデルを出そう！</div>
+  <div class="upload-box" id="uploadBox" onclick="document.getElementById('glbInput').click()">
+    <div class="icon">🧊</div>
+    <div class="label">GLBファイルを選ぶ</div>
+    <div class="sub">タップしてファイルを選択</div>
   </div>
-  <button class="splash-btn" onclick="goTo('create')">はじめる ▶</button>
+  <input type="file" id="glbInput" accept=".glb,.gltf" style="display:none;" onchange="handleGLB(this)">
+  <button class="start-btn" id="startBtn" onclick="startAR()">ARをはじめる ▶</button>
 </div>
 
-<!-- ══ 画面2：キャラ作成 ══ -->
-<div class="screen" id="screen-create">
-  <div class="header">
-    <div onclick="goTo('splash')" class="header-back">←</div>
-    <div>
-      <div class="header-title">キャラをつくろう</div>
-      <div class="header-sub">パーツを選んでね</div>
-    </div>
-    <div class="step-dots">
-      <div class="step-dot active"></div>
-      <div class="step-dot"></div>
-    </div>
-  </div>
-
-  <div class="create-body">
-    <!-- プレビュー -->
-    <div class="preview-box">
-      <div class="preview-canvas-wrap">
-        <canvas id="previewCanvas" width="160" height="160"></canvas>
-      </div>
-      <div class="preview-label">プレビュー</div>
-    </div>
-
-    <!-- 顔パーツ -->
-    <div class="parts-section">
-      <div class="parts-title">かお</div>
-      <div class="parts-grid" id="faceGrid"></div>
-    </div>
-
-    <!-- 体パーツ -->
-    <div class="parts-section">
-      <div class="parts-title">からだ</div>
-      <div class="parts-grid" id="bodyGrid"></div>
-    </div>
-
-    <!-- アクセサリー -->
-    <div class="parts-section">
-      <div class="parts-title">アクセサリー</div>
-      <div class="parts-grid" id="accessGrid"></div>
-    </div>
-
-    <!-- カラー -->
-    <div class="color-section">
-      <div class="parts-title">いろ</div>
-      <div class="color-row" id="colorRow"></div>
-    </div>
-
-    <!-- 名前 -->
-    <div class="name-section">
-      <div class="parts-title">なまえ</div>
-      <input class="name-input" id="charName" type="text" placeholder="キャラクターの名前" maxlength="10">
-    </div>
-
-    <button class="next-btn" onclick="goToAR()">
-      ARで見る → 
-    </button>
-  </div>
-</div>
-
-<!-- ══ 画面3：AR ══ -->
-<div class="screen" id="screen-ar">
+<!-- AR画面 -->
+<div id="screen-ar">
   <video id="arVideo" autoplay playsinline muted></video>
   <canvas id="arCanvas"></canvas>
-
   <div class="ar-ui">
     <div class="ar-header">
-      <div class="ar-back" onclick="goTo('create')">←</div>
-      <div class="ar-title-wrap">
-        <div class="ar-title">花火の方向に向けてね</div>
-        <div class="ar-sub" id="arSub">コンパスを読み取り中…</div>
-      </div>
-      <div style="margin-left:auto;">
-        <div style="font-size:10px;color:var(--muted);text-align:right;" id="headingDisplay">--°</div>
+      <div class="ar-back" onclick="stopAR()">←</div>
+      <div>
+        <div class="ar-title">マーカーを探してね</div>
+        <div class="ar-sub" id="arSub">黒と白の四角いマークに向けよう</div>
       </div>
     </div>
-
-    <div class="ar-center">
-      <div class="ar-compass" id="arCompass">
-        <div class="ar-compass-arrow" id="compassArrow">↑</div>
-        <div class="ar-compass-label" id="compassLabel">方角を検知中</div>
-      </div>
-      <div class="ar-hint" id="arHint">スマホを花火の方向に向けてね</div>
-    </div>
-
-    <div id="charOverlay" style="opacity:0;">
-      <div class="char-bubble">
-        <canvas id="arCharCanvas" width="120" height="140"></canvas>
-        <div class="char-name-tag" id="arCharName"></div>
-      </div>
-    </div>
-
+    <div class="ar-status" id="arStatus">📷 マーカーを探しています…</div>
     <div class="ar-bottom">
-      <div class="ar-bottom-btn" onclick="showAdminModal()">
-        <span class="btn-icon">⚙️</span>
-        方向設定
-      </div>
-      <div class="ar-bottom-btn primary" onclick="captureScreen()">
-        <span class="btn-icon">📸</span>
-        写真を撮る
-      </div>
-      <div class="ar-bottom-btn" onclick="goTo('create')">
-        <span class="btn-icon">✏️</span>
-        作り直す
-      </div>
+      <div class="ar-btn" onclick="stopAR()"><span class="bi">←</span>もどる</div>
+      <div class="ar-btn" onclick="alert('スマホのスクショで撮ってね！')"><span class="bi">📸</span>写真を撮る</div>
     </div>
   </div>
 </div>
 
-<!-- 管理者設定モーダル -->
-<div class="modal-overlay" id="adminModal">
-  <div class="modal-box">
-    <div class="modal-title">⚙️ 花火方向の設定</div>
-    <div class="modal-row">
-      <div class="modal-label">花火が上がる方角（0〜360°）</div>
-      <input class="modal-input" id="targetBearing" type="number" min="0" max="360" value="180" placeholder="例：180（南）">
-    </div>
-    <div class="modal-row">
-      <div class="modal-label">許容範囲（この角度以内で反応）</div>
-      <input class="modal-input" id="toleranceDeg" type="number" min="10" max="60" value="25" placeholder="25">
-    </div>
-    <div style="font-size:11px;color:var(--muted);line-height:1.8;">
-      北=0° 東=90° 南=180° 西=270°<br>
-      当日、花火の方向に合わせて設定してください
-    </div>
-    <div class="modal-btns">
-      <button class="modal-cancel" onclick="hideAdminModal()">キャンセル</button>
-      <button class="modal-ok" onclick="saveAdminSettings()">保存</button>
-    </div>
-  </div>
-</div>
+<!-- Three.js + GLTFLoader -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
+<!-- jsartoolkit for marker detection -->
+<script src="https://raw.githack.com/nicktindall/cyclon.p2p-rtc-client/master/node_modules/js-aruco/src/aruco.js"></script>
 
 <script>
-// ── パーツ定義 ──
-const PARTS = {
-  face: ['😊','😄','😎','🥰','😜','🤩','😺','🐻','🦊','🐸','👻','⭐'],
-  body: ['👕','🎽','👘','🦺','🎀','🌸','🔥','⚡','🌈','🍀','🎵','💎'],
-  access: ['🎩','👑','🌟','🎪','🎯','🎮','🌙','🌺','🎸','🏅','🎪','✨']
-};
-const COLORS = [
-  '#ff6b6b','#ff8800','#ffdd00','#66dd44','#44aaff','#cc66ff','#ff66bb','#44ddcc','#ffffff','#ffcc44'
-];
-
-let charState = {
-  face: '😊', body: '👕', access: '🌟', color: '#ffcc44', name: ''
-};
-
-// AR設定
-let targetBearing = 180;
-let toleranceDeg = 25;
-let currentHeading = null;
-let isAimed = false;
+let glbURL = null;
 let arStream = null;
-let compassWatchId = null;
-let floatOffset = 0;
+let threeScene, threeCamera, threeRenderer, glbModel;
+let animId = null;
+let markerVisible = false;
 
-// ── スプラッシュ星 ──
-const starsEl = document.getElementById('splashStars');
-for(let i=0;i<50;i++){
-  const s = document.createElement('div');
-  s.className = 'splash-star';
-  s.style.cssText = `left:${Math.random()*100}%;top:${Math.random()*100}%;--d:${2+Math.random()*4}s;--delay:${Math.random()*4}s;opacity:${0.2+Math.random()*0.8}`;
-  starsEl.appendChild(s);
+function handleGLB(input) {
+  const file = input.files[0];
+  if(!file) return;
+  if(glbURL) URL.revokeObjectURL(glbURL);
+  glbURL = URL.createObjectURL(file);
+  const box = document.getElementById('uploadBox');
+  box.classList.add('selected');
+  box.innerHTML = '<div class="icon">✅</div><div class="label">'+file.name+'</div><div class="sub">'+(file.size/1024).toFixed(1)+'KB</div>';
+  document.getElementById('startBtn').classList.add('show');
 }
 
-// ── 画面遷移 ──
-function goTo(id){
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  document.getElementById('screen-'+id).classList.add('active');
-  if(id === 'ar') startAR();
-  else stopAR();
-}
+async function startAR() {
+  if(!glbURL) return;
+  document.getElementById('screen-top').classList.remove('active');
+  document.getElementById('screen-ar').classList.add('active');
 
-function goToAR(){
-  charState.name = document.getElementById('charName').value || 'ともだち';
-  goTo('ar');
-}
-
-// ── パーツグリッド生成 ──
-function makeGrid(containerId, parts, category){
-  const grid = document.getElementById(containerId);
-  parts.forEach(p => {
-    const btn = document.createElement('div');
-    btn.className = 'part-btn' + (charState[category]===p?' selected':'');
-    btn.textContent = p;
-    btn.onclick = () => {
-      charState[category] = p;
-      grid.querySelectorAll('.part-btn').forEach(b=>b.classList.remove('selected'));
-      btn.classList.add('selected');
-      drawPreview();
-    };
-    grid.appendChild(btn);
-  });
-}
-makeGrid('faceGrid', PARTS.face, 'face');
-makeGrid('bodyGrid', PARTS.body, 'body');
-makeGrid('accessGrid', PARTS.access, 'access');
-
-// カラーボタン
-const colorRow = document.getElementById('colorRow');
-COLORS.forEach(c => {
-  const dot = document.createElement('div');
-  dot.className = 'color-dot' + (charState.color===c?' selected':'');
-  dot.style.background = c;
-  dot.onclick = () => {
-    charState.color = c;
-    colorRow.querySelectorAll('.color-dot').forEach(d=>d.classList.remove('selected'));
-    dot.classList.add('selected');
-    drawPreview();
-  };
-  colorRow.appendChild(dot);
-});
-
-// ── プレビュー描画 ──
-function drawCharOn(canvas, scale=1){
-  const ctx = canvas.getContext('2d');
-  const w = canvas.width, h = canvas.height;
-  ctx.clearRect(0,0,w,h);
-
-  const cx = w/2, cy = h/2;
-  const r = Math.min(w,h)*0.28*scale;
-
-  // 背景グロー
-  const grd = ctx.createRadialGradient(cx,cy,0,cx,cy,r*1.8);
-  grd.addColorStop(0, charState.color+'55');
-  grd.addColorStop(1, 'transparent');
-  ctx.fillStyle = grd;
-  ctx.fillRect(0,0,w,h);
-
-  // 体
-  ctx.font = `${r*1.6}px serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(charState.body, cx, cy+r*0.5);
-
-  // 顔
-  ctx.font = `${r*1.4}px serif`;
-  ctx.fillText(charState.face, cx, cy-r*0.3);
-
-  // アクセサリー
-  ctx.font = `${r*0.9}px serif`;
-  ctx.fillText(charState.access, cx+r*0.8, cy-r*0.9);
-}
-
-function drawPreview(){
-  drawCharOn(document.getElementById('previewCanvas'));
-}
-drawPreview();
-
-// ── AR起動 ──
-async function startAR(){
+  // カメラ起動
   try {
     arStream = await navigator.mediaDevices.getUserMedia({
-      video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}}
+      video:{facingMode:'environment', width:{ideal:1280}, height:{ideal:720}}
     });
     const video = document.getElementById('arVideo');
     video.srcObject = arStream;
-
-    // ARキャンバスリサイズ
-    const arCanvas = document.getElementById('arCanvas');
-    arCanvas.width = window.innerWidth;
-    arCanvas.height = window.innerHeight;
-
-    // ARキャラ描画
-    drawCharOn(document.getElementById('arCharCanvas'), 1);
-    document.getElementById('arCharName').textContent = charState.name;
-
-    // コンパス
-    startCompass();
-
-    // フロートアニメ
-    animateFloat();
-
-  } catch(e){
-    document.getElementById('arSub').textContent = 'カメラの許可が必要です';
+    await video.play();
+  } catch(e) {
+    document.getElementById('arStatus').textContent = 'カメラの許可が必要です';
+    return;
   }
+
+  // Three.js セットアップ
+  const canvas = document.getElementById('arCanvas');
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+
+  threeRenderer = new THREE.WebGLRenderer({canvas, alpha:true, antialias:true});
+  threeRenderer.setSize(window.innerWidth, window.innerHeight);
+  threeRenderer.setPixelRatio(window.devicePixelRatio);
+  threeRenderer.setClearColor(0x000000, 0);
+
+  threeScene = new THREE.Scene();
+  threeCamera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.01, 1000);
+  threeCamera.position.set(0, 2, 3);
+  threeCamera.lookAt(0, 0, 0);
+
+  // 照明
+  threeScene.add(new THREE.AmbientLight(0xffffff, 1.2));
+  const dir = new THREE.DirectionalLight(0xffffff, 1.0);
+  dir.position.set(1, 2, 1);
+  threeScene.add(dir);
+
+  // GLB読み込み
+  const loader = new THREE.GLTFLoader();
+  loader.load(glbURL, (gltf) => {
+    glbModel = gltf.scene;
+
+    // サイズ自動調整
+    const box3 = new THREE.Box3().setFromObject(glbModel);
+    const size = box3.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const scale = 1.0 / maxDim;
+    glbModel.scale.setScalar(scale);
+
+    glbModel.position.set(0, 0, 0);
+    glbModel.visible = false;
+    threeScene.add(glbModel);
+
+    document.getElementById('arStatus').textContent = '📷 マーカーを探しています…';
+    document.getElementById('arSub').textContent = '黒と白の四角いマークに向けよう';
+  }, undefined, (err) => {
+    document.getElementById('arStatus').textContent = 'モデルの読み込みに失敗しました';
+  });
+
+  // マーカー検出ループ（簡易版：明るさベースの擬似検出）
+  // 実際のHiroマーカー検出はjsARToolKitが必要だが
+  // ここではシンプルにタップでモデルを表示するデモモードを用意
+  setupTapToShow();
+
+  // レンダリングループ
+  let rot = 0;
+  function render() {
+    animId = requestAnimationFrame(render);
+    if(glbModel && glbModel.visible) {
+      glbModel.rotation.y += 0.01;
+    }
+    threeRenderer.render(threeScene, threeCamera);
+  }
+  render();
 }
 
-function stopAR(){
-  if(arStream) arStream.getTracks().forEach(t=>t.stop());
+function setupTapToShow() {
+  const status = document.getElementById('arStatus');
+  const sub = document.getElementById('arSub');
+  status.textContent = '📷 画面をタップするとモデルが出るよ！';
+  sub.textContent = '（マーカー認識の代わりにタップ操作）';
+
+  document.getElementById('arCanvas').style.pointerEvents = 'all';
+  document.getElementById('arCanvas').addEventListener('click', () => {
+    if(!glbModel) return;
+    markerVisible = !markerVisible;
+    glbModel.visible = markerVisible;
+    if(markerVisible) {
+      status.textContent = '✨ モデルが出た！';
+      status.classList.add('found');
+      sub.textContent = 'もう一度タップで消えるよ';
+    } else {
+      status.textContent = '📷 画面をタップするとモデルが出るよ！';
+      status.classList.remove('found');
+      sub.textContent = '（マーカー認識の代わりにタップ操作）';
+    }
+  });
+}
+
+function stopAR() {
+  if(animId){ cancelAnimationFrame(animId); animId = null; }
+  if(arStream) arStream.getTracks().forEach(t => t.stop());
   arStream = null;
-  if(typeof DeviceOrientationEvent !== 'undefined'){
-    window.removeEventListener('deviceorientation', handleOrientation);
-  }
-}
-
-// ── コンパス ──
-function startCompass(){
-  if(typeof DeviceOrientationEvent === 'undefined'){
-    simulateCompass(); return;
-  }
-  if(typeof DeviceOrientationEvent.requestPermission === 'function'){
-    DeviceOrientationEvent.requestPermission().then(state => {
-      if(state==='granted'){
-        window.addEventListener('deviceorientation', handleOrientation, true);
-      } else {
-        simulateCompass();
-      }
-    }).catch(()=>simulateCompass());
-  } else {
-    window.addEventListener('deviceorientation', handleOrientation, true);
-  }
-}
-
-function handleOrientation(e){
-  let heading = null;
-  if(e.webkitCompassHeading !== undefined){
-    heading = e.webkitCompassHeading; // iOS
-  } else if(e.alpha !== null){
-    heading = (360 - e.alpha) % 360; // Android
-  }
-  if(heading !== null){
-    currentHeading = heading;
-    updateARState(heading);
-  }
-}
-
-// デスクトップ・タッチ操作シミュレーター
-function simulateCompass(){
-  document.getElementById('arSub').textContent = 'デモモード：画面をドラッグ or スライダーで方向を変えよう';
-
-  // スライダーUI を AR画面に追加
-  const existing = document.getElementById('simSliderWrap');
-  if(!existing){
-    const wrap = document.createElement('div');
-    wrap.id = 'simSliderWrap';
-    wrap.style.cssText = `
-      position:absolute;bottom:110px;left:16px;right:16px;
-      background:rgba(0,0,0,0.6);border:1px solid rgba(255,255,255,0.15);
-      border-radius:14px;padding:10px 16px;backdrop-filter:blur(6px);
-      z-index:50;pointer-events:all;
-    `;
-    wrap.innerHTML = `
-      <div style="font-size:10px;color:rgba(255,255,255,0.5);margin-bottom:6px;text-align:center;">
-        ← スワイプして方向を変える →
-      </div>
-      <input type="range" id="simSlider" min="0" max="359" value="0" step="1"
-        style="width:100%;accent-color:#ffcc44;">
-      <div style="text-align:center;font-size:12px;color:#ffcc44;margin-top:4px;" id="simDeg">0°</div>
-    `;
-    document.getElementById('screen-ar').appendChild(wrap);
-
-    document.getElementById('simSlider').addEventListener('input', function(){
-      currentHeading = parseInt(this.value);
-      document.getElementById('simDeg').textContent = currentHeading + '°';
-      updateARState(currentHeading);
-    });
-  }
-
-  // ドラッグ操作（マウス・タッチ共通）
-  const arScreen = document.getElementById('screen-ar');
-  let dragStartX = null;
-  let dragStartHeading = 0;
-
-  function onDragStart(clientX){
-    dragStartX = clientX;
-    dragStartHeading = currentHeading || 0;
-  }
-  function onDragMove(clientX){
-    if(dragStartX === null) return;
-    const delta = (clientX - dragStartX) * 0.5;
-    currentHeading = ((dragStartHeading + delta) % 360 + 360) % 360;
-    const slider = document.getElementById('simSlider');
-    if(slider) slider.value = Math.round(currentHeading);
-    const degEl = document.getElementById('simDeg');
-    if(degEl) degEl.textContent = Math.round(currentHeading) + '°';
-    updateARState(currentHeading);
-  }
-  function onDragEnd(){ dragStartX = null; }
-
-  arScreen.addEventListener('mousedown',  e => onDragStart(e.clientX));
-  arScreen.addEventListener('mousemove',  e => onDragMove(e.clientX));
-  arScreen.addEventListener('mouseup',    onDragEnd);
-  arScreen.addEventListener('touchstart', e => onDragStart(e.touches[0].clientX), {passive:true});
-  arScreen.addEventListener('touchmove',  e => onDragMove(e.touches[0].clientX), {passive:true});
-  arScreen.addEventListener('touchend',   onDragEnd);
-
-  // 初期状態を表示
-  currentHeading = 0;
-  updateARState(0);
-}
-
-function updateARState(heading){
-  const display = document.getElementById('headingDisplay');
-  display.textContent = Math.round(heading)+'°';
-
-  const diff = Math.abs(((heading - targetBearing + 540) % 360) - 180);
-  const aimed = diff < toleranceDeg;
-
-  const compass = document.getElementById('arCompass');
-  const hint = document.getElementById('arHint');
-  const overlay = document.getElementById('charOverlay');
-  const arSub = document.getElementById('arSub');
-  const label = document.getElementById('compassLabel');
-
-  // 矢印を花火方向に向ける
-  const arrowAngle = ((targetBearing - heading + 360) % 360);
-  document.getElementById('compassArrow').style.transform = `rotate(${arrowAngle}deg)`;
-
-  if(aimed){
-    if(!isAimed){
-      isAimed = true;
-      compass.classList.add('aimed');
-      hint.classList.add('aimed');
-      hint.textContent = '✨ キャラが現れた！';
-      arSub.textContent = '花火の方向にキャラが出現中';
-      label.textContent = '花火方向';
-    }
-    overlay.style.opacity = '1';
-    positionOverlay();
-  } else {
-    if(isAimed){
-      isAimed = false;
-      compass.classList.remove('aimed');
-      hint.classList.remove('aimed');
-      hint.textContent = 'スマホを花火の方向に向けてね';
-      arSub.textContent = '矢印の方向に向けると出てくるよ';
-      label.textContent = '方角を検知中';
-    }
-    overlay.style.opacity = '0';
-  }
-}
-
-function positionOverlay(){
-  const overlay = document.getElementById('charOverlay');
-  const cw = window.innerWidth;
-  const ch = window.innerHeight;
-  // 画面中央よりやや上、花火が上がるイメージ
-  overlay.style.left = (cw/2 - 60)+'px';
-  overlay.style.top = (ch*0.25 + Math.sin(floatOffset)*12)+'px';
-}
-
-function animateFloat(){
-  if(!document.getElementById('screen-ar').classList.contains('active')) return;
-  floatOffset += 0.04;
-  if(isAimed) positionOverlay();
-  requestAnimationFrame(animateFloat);
-}
-
-// ── 管理者モーダル ──
-function showAdminModal(){
-  document.getElementById('targetBearing').value = targetBearing;
-  document.getElementById('toleranceDeg').value = toleranceDeg;
-  document.getElementById('adminModal').classList.add('show');
-}
-function hideAdminModal(){
-  document.getElementById('adminModal').classList.remove('show');
-}
-function saveAdminSettings(){
-  targetBearing = parseInt(document.getElementById('targetBearing').value) || 180;
-  toleranceDeg = parseInt(document.getElementById('toleranceDeg').value) || 25;
-  hideAdminModal();
-  document.getElementById('arSub').textContent = `花火方向：${targetBearing}° 範囲：±${toleranceDeg}°`;
-}
-
-// ── スクリーンショット ──
-function captureScreen(){
-  const video = document.getElementById('arVideo');
-  const overlay = document.getElementById('charOverlay');
-  const tmpCanvas = document.createElement('canvas');
-  tmpCanvas.width = window.innerWidth;
-  tmpCanvas.height = window.innerHeight;
-  const ctx = tmpCanvas.getContext('2d');
-
-  // カメラ映像
-  ctx.drawImage(video, 0, 0, tmpCanvas.width, tmpCanvas.height);
-
-  // キャラ合成（表示中のみ）
-  if(isAimed){
-    const charCanvas = document.getElementById('arCharCanvas');
-    const x = parseInt(overlay.style.left)||0;
-    const y = parseInt(overlay.style.top)||0;
-    ctx.drawImage(charCanvas, x, y, 120, 140);
-  }
-
-  // ダウンロード
-  const a = document.createElement('a');
-  a.download = 'hanabi-ar.png';
-  a.href = tmpCanvas.toDataURL('image/png');
-  a.click();
+  if(threeRenderer) threeRenderer.dispose();
+  threeScene = null; threeCamera = null; threeRenderer = null; glbModel = null;
+  document.getElementById('screen-ar').classList.remove('active');
+  document.getElementById('screen-top').classList.add('active');
+  document.getElementById('arStatus').textContent = '📷 マーカーを探しています…';
+  document.getElementById('arStatus').classList.remove('found');
+  markerVisible = false;
 }
 </script>
 </body>
