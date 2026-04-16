@@ -66,7 +66,7 @@ body{font-family:'Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif;backgroun
 <div id="screen-ar">
   <a-scene
     id="arScene"
-    mindar-image="imageTargetSrc: marker.mind; autoStart: false;"
+    mindar-image="imageTargetSrc: https://mokomoko4.github.io/hanabi-ar/targets.mind; autoStart: true;"
     color-space="sRGB"
     renderer="colorManagement: true; physicallyCorrectLights: true;"
     vr-mode-ui="enabled: false"
@@ -132,16 +132,9 @@ function startAR() {
   document.getElementById('screen-top').classList.remove('active');
   document.getElementById('screen-ar').classList.add('active');
 
-  // Mind AR起動
-  const scene = document.getElementById('arScene');
+  // マーカー検出イベント（1回だけ登録）
   if(!arStarted) {
     arStarted = true;
-    scene.addEventListener('loaded', () => {
-      const mindar = scene.systems['mindar-image-system'];
-      if(mindar) mindar.start();
-    });
-
-    // マーカー検出イベント
     const target = document.querySelector('[mindar-image-target]');
     target.addEventListener('targetFound', () => {
       document.getElementById('arStatus').textContent = '✨ モデルが出た！';
@@ -153,16 +146,11 @@ function startAR() {
       document.getElementById('arStatus').classList.remove('found');
       document.getElementById('arSub').textContent = '看板やポスターにカメラを向けよう';
     });
-  } else {
-    const mindar = scene.systems['mindar-image-system'];
-    if(mindar) mindar.start();
   }
 }
 
 function stopAR() {
-  const scene = document.getElementById('arScene');
-  const mindar = scene.systems['mindar-image-system'];
-  if(mindar) mindar.stop();
+
   document.getElementById('screen-ar').classList.remove('active');
   document.getElementById('screen-top').classList.add('active');
   document.getElementById('arStatus').textContent = '📷 マーカーを探しています…';
