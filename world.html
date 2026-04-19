@@ -62,6 +62,7 @@ body{overflow:hidden;background:#000;font-family:'Hiragino Kaku Gothic ProN','No
 </head>
 <body>
 
+<video id="bgVideo" autoplay playsinline muted style="position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;"></video>
 <canvas id="canvas"></canvas>
 
 <!-- ローディング -->
@@ -96,6 +97,12 @@ body{overflow:hidden;background:#000;font-family:'Hiragino Kaku Gothic ProN','No
 </div>
 
 <script>
+// カメラ起動
+navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}})
+  .then(stream => {
+    document.getElementById('bgVideo').srcObject = stream;
+  }).catch(() => {});
+
 // ── デモ用の作品データ（後でFirebaseに差し替える） ──
 // デモ用：CanvasでカラフルなPNGを生成して表示
 const DEMO_WORKS = [
@@ -206,7 +213,6 @@ function loadWorks() {
         const mesh = new THREE.Mesh(geo, mat);
         mesh.position.copy(pos);
         mesh.lookAt(0,0,0);
-        mesh.rotateY(Math.PI);
         mesh.userData.baseY = pos.y;
         mesh.userData.floatSpeed = 0.5 + Math.random()*0.5;
         mesh.userData.floatPhase = Math.random()*Math.PI*2;
@@ -238,7 +244,6 @@ function loadWorks() {
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.copy(pos);
       mesh.lookAt(0,0,0);
-      mesh.rotateY(Math.PI);
       mesh.userData.baseY = pos.y;
       mesh.userData.floatSpeed = 0.5 + Math.random()*0.5;
       mesh.userData.floatPhase = Math.random()*Math.PI*2;
