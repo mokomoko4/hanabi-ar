@@ -297,12 +297,28 @@ function requestGyro() {
 
 function startGyro() {
   useGyro = true;
+  const zee = new THREE.Vector3(0, 0, 1);
+  const euler = new THREE.Euler();
+  const q0 = new THREE.Quaternion();
+  const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
+
   window.addEventListener('deviceorientation', (e) => {
     if(e.alpha === null) return;
-    if(baseAlpha === null) baseAlpha = e.alpha;
-    alpha = e.alpha;
-    beta = e.beta;
-    gamma = e.gamma;
+
+    const heading = e.webkitCompassHeading != null
+      ? THREE.MathUtils.degToRad(e.webkitCompassHeading)
+      : THREE.MathUtils.degToRad(360 - e.alpha);
+
+    euler.set(
+      THREE.MathUtils.degToRad(e.beta),
+      THREE.MathUtils.degToRad(e.alpha),
+      THREE.MathUtils.degToRad(-e.gamma),
+      'YXZ'
+    );
+
+    camera.quaternion.setFromEuler(euler);
+    camera.quaternion.multiply(q1);
+    camera.quaternion.multiply(q0.setFromAxisAngle(zee, -heading));
   }, true);
 }
 
@@ -343,15 +359,8 @@ function animate() {
   requestAnimationFrame(animate);
   t += 0.01;
 
-  if(useGyro && baseAlpha !== null) {
-    // ジャイロでカメラ向き制御
-    const da = ((alpha - baseAlpha) + 360) % 360;
-    const yawRad = -(da * Math.PI / 180);
-    const pitchRad = (beta - 90) * Math.PI / 180;
-    camera.rotation.order = 'YXZ';
-    camera.rotation.y = yawRad;
-    camera.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitchRad));
-  } else {
+  if(!useGyro) {
+    // マウス/タッチ時のみ回転制御
     // マウス/タッチでカメラ向き制御
     camera.rotation.order = 'YXZ';
     camera.rotation.y = yaw;
