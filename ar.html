@@ -42,7 +42,7 @@ body{overflow:hidden;background:#000;font-family:'Hiragino Kaku Gothic ProN','No
       <div class="ar-sub" id="arSub">看板の花火写真にカメラを向けよう</div>
     </div>
     <div class="ar-count" id="arCount">0 作品</div>
-    <div class="ar-ver">v4.0</div>
+    <div class="ar-ver">v4.1</div>
   </div>
   <div class="ar-status" id="arStatus">📷 マーカーを探しています…</div>
   <div class="ar-bottom">
@@ -238,17 +238,6 @@ function addWork(work) {
   }
   document.getElementById('arCount').textContent = addedIds.size + ' 作品';
 }
-
-// デモデータ
-const DEMO = [
-  {id:'d1', type:'canvas', color:'#ff6b6b', emoji:'🎆', label:'はなびだ！'},
-  {id:'d2', type:'canvas', color:'#ffcc44', emoji:'🌟', label:'ほしがすき'},
-  {id:'d3', type:'canvas', color:'#66dd44', emoji:'🎨', label:'えをかいたよ'},
-  {id:'d4', type:'canvas', color:'#4488ff', emoji:'🌈', label:'にじいろ'},
-  {id:'d5', type:'canvas', color:'#cc66ff', emoji:'🦊', label:'きつねくん'},
-  {id:'d6', type:'canvas', color:'#ff88bb', emoji:'🌸', label:'はなびら'},
-];
-DEMO.forEach(w => addWork(w));
 
 // Firebaseから読み込む
 db.ref('works').on('child_added', (snap) => {
