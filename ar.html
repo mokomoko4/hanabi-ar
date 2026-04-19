@@ -169,17 +169,16 @@ function addWork(work) {
 
 // ══ Firebase or デモデータを読み込む ══
 function loadWorks() {
+  // まずデモデータを表示（動作確認用）
+  DEMO_WORKS.forEach(w => addWork(w));
+
   if(firebaseReady && db) {
-    // Firebaseからリアルタイムで読み込む
+    // Firebaseからもリアルタイムで読み込む
     db.ref('works').on('child_added', (snap) => {
       const work = snap.val();
       work.id = snap.key;
       addWork(work);
     });
-  } else {
-    // デモデータを表示
-    DEMO_WORKS.forEach(w => addWork(w));
-    document.getElementById('arSub').textContent = 'デモモード（Firebase未設定）';
   }
 }
 
