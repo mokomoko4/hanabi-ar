@@ -285,10 +285,17 @@ function initThreeJS(url) {
   },{passive:false});
   canvas.addEventListener('touchend', ()=>isDragging=false);
 
+  // 3秒後に自動回転停止
+  setTimeout(() => {
+    autoRotating = false;
+    document.getElementById('rotateIcon').textContent = '▶';
+    document.getElementById('rotateLabel').textContent = '回転開始';
+  }, 3000);
+
   function render() {
     threeAnimId = requestAnimationFrame(render);
     if(threeModel) {
-      if(autoRotating && !isDragging) rotY += 0.008;
+      if(autoRotating && !isDragging) rotY += 0.012;
       threeModel.rotation.y = rotY;
       threeModel.rotation.x = rotX;
     }
