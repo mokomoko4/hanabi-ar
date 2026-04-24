@@ -113,7 +113,7 @@ body{background:radial-gradient(ellipse at 50% 40%,#180032 0%,#050014 75%);}
       <div class="sub" id="headerSub">スマホを動かして見渡してね</div>
     </div>
     <div class="badge" id="workCount">0 作品</div>
-    <div class="ver">v5.5</div>
+    <div class="ver">v5.6</div>
   </div>
   <div class="center-status good" id="statusText">✨ タップして作品を出そう！</div>
   <div class="hint" id="hintText">📱 作品タップで輪郭が光ってから花火に変身！</div>
@@ -313,22 +313,21 @@ function launchOutlineFirework(edgePixels, cx, cy) {
 
   // 輪郭パーティクル：ロケット到着後にスポーン
   setTimeout(()=>{
-    const TRAVEL_F = 20, HOLD_F = 32, SCALE = 2.8;
+    const TRAVEL_F = 20, SCALE = 2.8;
     edgePixels.forEach(p=>{
       const tv = TRAVEL_F + Math.floor(Math.random()*10);
       const dx=(p.px-cx)*SCALE, dy=(p.py-cy)*SCALE;
       const tx=cx+dx, ty=cy+dy;
-      const angle = Math.atan2(dy,dx) + (Math.random()-0.5)*0.5;
       particles2D.push({
         type:'outline', phase:'travel',
         x:cx, y:cy, startX:cx, startY:cy, targetX:tx, targetY:ty,
-        travelFrames:tv, travelLeft:tv, holdFrames:HOLD_F,
-        vx:0, vy:0,
+        travelFrames:tv, travelLeft:tv,
+        arriveGlow:12,
+        vx:(Math.random()-0.5)*0.4,
+        vy:0.15+Math.random()*0.5,
         color:`rgb(${p.r},${p.g},${p.b})`,
-        life:1.0, decay:0.003+Math.random()*0.003,
-        size:3+Math.random()*2.5,
-        explodeAngle:angle,
-        explodeSpeed:4+Math.random()*11,
+        life:1.0, decay:0.006+Math.random()*0.004,
+        size:1.5+Math.random()*1.5,
       });
     });
     playBoom(0.15);
@@ -658,28 +657,21 @@ function renderFX(){
         const ease=prog<0.5?2*prog*prog:1-Math.pow(-2*prog+2,2)/2;
         p.x=p.startX+(p.targetX-p.startX)*ease;
         p.y=p.startY+(p.targetY-p.startY)*ease;
-        if(p.travelLeft<=0){p.x=p.targetX;p.y=p.targetY;p.phase='hold';}
-        fx2d.globalAlpha=0.6;
+        if(p.travelLeft<=0){p.x=p.targetX;p.y=p.targetY;p.phase='fall';}
+        fx2d.globalAlpha=0.55;
         fx2d.fillStyle=p.color;
-        fx2d.beginPath();fx2d.arc(p.x,p.y,p.size*0.7,0,Math.PI*2);fx2d.fill();
-      } else if(p.phase==='hold'){
-        p.holdFrames--;
-        p.x+=(Math.random()-0.5)*0.25;
-        p.y+=(Math.random()-0.5)*0.25;
-        fx2d.globalAlpha=p.life*0.5;
-        fx2d.fillStyle='#ffffff';
-        fx2d.beginPath();fx2d.arc(p.x,p.y,p.size*3,0,Math.PI*2);fx2d.fill();
-        fx2d.globalAlpha=p.life;
-        fx2d.fillStyle=p.color;
-        fx2d.beginPath();fx2d.arc(p.x,p.y,p.size,0,Math.PI*2);fx2d.fill();
-        p.life-=p.decay*0.2;
-        if(p.holdFrames<=0){
-          p.phase='explode';
-          p.vx=Math.cos(p.explodeAngle)*p.explodeSpeed;
-          p.vy=Math.sin(p.explodeAngle)*p.explodeSpeed;
-        }
+        fx2d.beginPath();fx2d.arc(p.x,p.y,p.size*0.6,0,Math.PI*2);fx2d.fill();
       } else {
-        p.x+=p.vx;p.y+=p.vy;p.vy+=0.13;p.vx*=0.97;p.vy*=0.97;
+        // 到着直後の短い輝き
+        if(p.arriveGlow>0){
+          p.arriveGlow--;
+          fx2d.globalAlpha=(p.arriveGlow/12)*0.5;
+          fx2d.fillStyle='#ffffff';
+          fx2d.beginPath();fx2d.arc(p.x,p.y,p.size*2.2,0,Math.PI*2);fx2d.fill();
+        }
+        // ゆっくり落下
+        p.x+=p.vx; p.y+=p.vy;
+        p.vy+=0.04; p.vx*=0.99;
         p.life-=p.decay;
         if(p.life<=0){particles2D.splice(i,1);continue;}
         fx2d.globalAlpha=p.life;
