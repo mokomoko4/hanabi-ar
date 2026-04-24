@@ -113,7 +113,7 @@ body{background:radial-gradient(ellipse at 50% 40%,#180032 0%,#050014 75%);}
       <div class="sub" id="headerSub">スマホを動かして見渡してね</div>
     </div>
     <div class="badge" id="workCount">0 作品</div>
-    <div class="ver">v5.3</div>
+    <div class="ver">v5.4</div>
   </div>
   <div class="center-status good" id="statusText">✨ タップして作品を出そう！</div>
   <div class="hint" id="hintText">📱 作品タップで輪郭が光ってから花火に変身！</div>
@@ -250,84 +250,88 @@ function selectWork(id){
 }
 
 // ══════════════════════════════════════════════
-// 🎆 輪郭花火エンジン
+// 🎆 輪郭花火エンジン v2
 // ══════════════════════════════════════════════
 
-// ① エッジ検出：imgSourceは<img>要素またはHTMLImageElement
+// ① エッジ検出：128px解像度・8方向カラー距離（子供の絵向け）
 function detectEdgePixels(imgSource, displayW, displayH, cx, cy) {
-  const S = 48; // サンプリング解像度
+  const S = 128;
   const cv = document.createElement('canvas');
   cv.width = S; cv.height = S;
   const ctx = cv.getContext('2d');
   ctx.drawImage(imgSource, 0, 0, S, S);
   const d = ctx.getImageData(0, 0, S, S).data;
 
-  const luma = (i) => d[i]*0.3 + d[i+1]*0.59 + d[i+2]*0.11;
+  function cdist(i, j) {
+    if(d[i+3] < 15 || d[j+3] < 15) return Math.abs(d[i+3]-d[j+3])*2;
+    const dr=d[i]-d[j], dg=d[i+1]-d[j+1], db=d[i+2]-d[j+2];
+    return Math.sqrt(dr*dr + dg*dg + db*db);
+  }
 
-  const edgePixels = [];
+  const raw = [];
   for(let y=1; y<S-1; y++){
     for(let x=1; x<S-1; x++){
       const i = (y*S+x)*4;
-      if(d[i+3] < 20) continue; // 透明スキップ
-
-      // アルファエッジ（シルエット輪郭）
-      const aU=d[((y-1)*S+x)*4+3], aD=d[((y+1)*S+x)*4+3];
-      const aL=d[(y*S+x-1)*4+3],   aR=d[(y*S+x+1)*4+3];
-      const alphaEdge = Math.max(
-        Math.abs(d[i+3]-aU), Math.abs(d[i+3]-aD),
-        Math.abs(d[i+3]-aL), Math.abs(d[i+3]-aR)
-      ) > 35;
-
-      // 輝度エッジ（内部の線・模様）
-      const lC=luma(i);
-      const lU=luma(((y-1)*S+x)*4), lD=luma(((y+1)*S+x)*4);
-      const lL=luma((y*S+x-1)*4),   lR=luma((y*S+x+1)*4);
-      const colorEdge = Math.max(
-        Math.abs(lC-lU), Math.abs(lC-lD),
-        Math.abs(lC-lL), Math.abs(lC-lR)
-      ) > 22;
-
-      if(alphaEdge || colorEdge){
-        // 正規化座標(0-1)をスクリーン座標に変換
-        const px = (cx - displayW/2) + (x/S)*displayW;
-        const py = (cy - displayH/2) + (y/S)*displayH;
-        edgePixels.push({
-          px, py,
-          r:d[i], g:d[i+1], b:d[i+2]
+      if(d[i+3] < 10) continue;
+      const ns = [
+        ((y-1)*S+(x-1))*4, ((y-1)*S+x)*4, ((y-1)*S+(x+1))*4,
+        (y*S+(x-1))*4,                      (y*S+(x+1))*4,
+        ((y+1)*S+(x-1))*4, ((y+1)*S+x)*4, ((y+1)*S+(x+1))*4
+      ];
+      let mx = 0;
+      for(const ni of ns) mx = Math.max(mx, cdist(i, ni));
+      if(mx > 28) {
+        raw.push({
+          px: (cx - displayW/2) + (x/S)*displayW,
+          py: (cy - displayH/2) + (y/S)*displayH,
+          r: d[i], g: d[i+1], b: d[i+2]
         });
       }
     }
   }
-  return edgePixels;
+
+  // 均等サブサンプリング（最大380点）
+  if(raw.length <= 380) return raw;
+  const step = raw.length / 380;
+  return Array.from({length:380}, (_,k) => raw[Math.floor(k*step)]);
 }
 
-// ② 輪郭パーティクルをspawn（holdFrames付き）
-function spawnOutlineParticles(edgePixels, cx, cy, maxCount=240) {
-  if(edgePixels.length === 0) return false;
+// ② ロケット打ち上げ → 輪郭展開 → 爆発
+function launchOutlineFirework(edgePixels, cx, cy) {
+  if(edgePixels.length === 0) { spawnBurst(cx, cy, true); return; }
 
-  // 多すぎる場合はランダムサンプリング
-  const pixels = edgePixels.length <= maxCount
-    ? edgePixels
-    : edgePixels.filter(()=>Math.random()<maxCount/edgePixels.length).slice(0,maxCount);
+  const launchY = window.innerHeight + 10;
+  const ROCKET_FRAMES = 32;
 
-  pixels.forEach(p=>{
-    // 中心から外方向の爆発ベクトル
-    const dx=p.px-cx, dy=p.py-cy;
-    const angle = Math.atan2(dy,dx) + (Math.random()-0.5)*1.1;
-    const speed = 2.5 + Math.random()*10;
-
-    particles2D.push({
-      x:p.px, y:p.py,
-      vx:Math.cos(angle)*speed,
-      vy:Math.sin(angle)*speed,
-      color:`rgb(${p.r},${p.g},${p.b})`,
-      life:1.0,
-      decay: 0.004 + Math.random()*0.007,
-      size: 2.5 + Math.random()*3,
-      holdFrames: 18 + Math.floor(Math.random()*10), // ~0.3-0.45秒待機
-    });
+  // ロケット粒子（下から打ち上げ）
+  particles2D.push({
+    type:'rocket', phase:'travel',
+    x:cx, y:launchY, startX:cx, startY:launchY, targetX:cx, targetY:cy,
+    travelFrames:ROCKET_FRAMES, travelLeft:ROCKET_FRAMES,
+    size:5, color:'#ffffff', life:1.0, decay:0
   });
-  return true;
+
+  // 輪郭パーティクル：ロケット到着後にスポーン
+  setTimeout(()=>{
+    const TRAVEL_F = 18, HOLD_F = 32;
+    edgePixels.forEach(p=>{
+      const tv = TRAVEL_F + Math.floor(Math.random()*10);
+      const dx=p.px-cx, dy=p.py-cy;
+      const angle = Math.atan2(dy,dx) + (Math.random()-0.5)*0.55;
+      particles2D.push({
+        type:'outline', phase:'travel',
+        x:cx, y:cy, startX:cx, startY:cy, targetX:p.px, targetY:p.py,
+        travelFrames:tv, travelLeft:tv, holdFrames:HOLD_F,
+        vx:0, vy:0,
+        color:`rgb(${p.r},${p.g},${p.b})`,
+        life:1.0, decay:0.003+Math.random()*0.003,
+        size:2.5+Math.random()*2,
+        explodeAngle:angle,
+        explodeSpeed:3+Math.random()*9,
+      });
+    });
+    playBoom(0.15);
+  }, 530);
 }
 
 // ③ カメラオーバーレイ作品の花火化
@@ -343,22 +347,17 @@ function explodeWorkToFirework(imgEl, nameEl, work, cx, cy) {
   imgEl.classList.add('exploding');
   if(nameEl) nameEl.classList.remove('visible');
 
-  // 輪郭エッジを取得してパーティクル生成
   try {
     const w=parseFloat(imgEl.style.width)||120;
     const h=parseFloat(imgEl.style.height)||120;
     const edgePixels = detectEdgePixels(imgEl, w, h, cx, cy);
-    const ok = spawnOutlineParticles(edgePixels, cx, cy);
-    if(!ok) spawnBurst(cx, cy, true); // フォールバック
+    launchOutlineFirework(edgePixels, cx, cy);
   } catch(e){
     spawnBurst(cx, cy, true);
   }
 
-  // 音：輪郭出現と同時にヒュー → holdFrames終了後にドーン
-  playWhistle();
-  setTimeout(()=>playBoom(0.15), 500);
+  playRocketWhistle();
 
-  // 3.2秒後に再出現
   setTimeout(()=>{
     imgEl.classList.remove('exploding');
     void imgEl.offsetWidth;
@@ -366,7 +365,7 @@ function explodeWorkToFirework(imgEl, nameEl, work, cx, cy) {
     if(nameEl) nameEl.classList.add('visible');
     imgEl.dataset.exploding='0';
     setTimeout(()=>imgEl.classList.remove('popping'),600);
-  }, 3200);
+  }, 3800);
 }
 
 // ④ ワールドモード：URL読み込んで輪郭花火
@@ -379,11 +378,9 @@ function explodeWorldWork(mesh, work, sx, sy) {
   function doExplode(imgSource){
     try {
       const edgePixels=detectEdgePixels(imgSource,110,110,sx,sy);
-      const ok=spawnOutlineParticles(edgePixels,sx,sy);
-      if(!ok) spawnBurst(sx,sy,true);
+      launchOutlineFirework(edgePixels,sx,sy);
     } catch(e){ spawnBurst(sx,sy,true); }
-    playWhistle();
-    setTimeout(()=>playBoom(0.15),500);
+    playRocketWhistle();
   }
 
   if(work.type==='png' && work.url){
@@ -395,7 +392,7 @@ function explodeWorldWork(mesh, work, sx, sy) {
     spawnBurst(sx,sy,true); playWhistle(); setTimeout(()=>playBoom(0.12),420);
   }
 
-  setTimeout(()=>{ mesh.visible=true; mesh.userData.exploding='0'; },3200);
+  setTimeout(()=>{ mesh.visible=true; mesh.userData.exploding='0'; },3800);
 }
 
 // ── ワールドレンダラー ──
@@ -605,6 +602,17 @@ function playWhistle(){
     osc.start(ctx.currentTime);osc.stop(ctx.currentTime+0.45);
   }catch(e){}
 }
+function playRocketWhistle(){
+  try{
+    const ctx=getAudio(),osc=ctx.createOscillator(),g=ctx.createGain();
+    osc.connect(g);g.connect(ctx.destination);osc.type='sine';
+    osc.frequency.setValueAtTime(180,ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(2200,ctx.currentTime+0.53);
+    g.gain.setValueAtTime(0.05,ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.53);
+    osc.start(ctx.currentTime);osc.stop(ctx.currentTime+0.53);
+  }catch(e){}
+}
 function spawnBurst(x,y,big=false){
   const cols=['#ff4444','#ff8800','#ffee00','#44ff88','#4488ff','#cc44ff','#ff88cc','#44ffdd'];
   const c=cols[Math.floor(Math.random()*cols.length)];
@@ -620,24 +628,79 @@ function renderFX(){
   fx2d.clearRect(0,0,fxCanvas.width,fxCanvas.height);
   for(let i=particles2D.length-1;i>=0;i--){
     const p=particles2D[i];
+
+    if(p.type==='rocket'){
+      p.travelLeft--;
+      const prog=1-p.travelLeft/p.travelFrames;
+      const ease=prog*prog; // ease-in（加速感）
+      p.x=p.startX+(p.targetX-p.startX)*ease;
+      p.y=p.startY+(p.targetY-p.startY)*ease;
+      if(p.travelLeft<=0){particles2D.splice(i,1);continue;}
+      const tail=Math.min(1,p.travelLeft/10);
+      const gl=fx2d.createRadialGradient(p.x,p.y,0,p.x,p.y,p.size*6);
+      gl.addColorStop(0,'rgba(255,240,180,0.95)');
+      gl.addColorStop(0.35,'rgba(255,130,30,0.55)');
+      gl.addColorStop(1,'rgba(255,80,0,0)');
+      fx2d.globalAlpha=tail*0.9;
+      fx2d.fillStyle=gl;
+      fx2d.beginPath();fx2d.arc(p.x,p.y,p.size*6,0,Math.PI*2);fx2d.fill();
+      fx2d.globalAlpha=1;
+      continue;
+    }
+
+    if(p.type==='outline'){
+      if(p.phase==='travel'){
+        p.travelLeft--;
+        const prog=1-p.travelLeft/p.travelFrames;
+        const ease=prog<0.5?2*prog*prog:1-Math.pow(-2*prog+2,2)/2;
+        p.x=p.startX+(p.targetX-p.startX)*ease;
+        p.y=p.startY+(p.targetY-p.startY)*ease;
+        if(p.travelLeft<=0){p.x=p.targetX;p.y=p.targetY;p.phase='hold';}
+        fx2d.globalAlpha=0.6;
+        fx2d.fillStyle=p.color;
+        fx2d.beginPath();fx2d.arc(p.x,p.y,p.size*0.7,0,Math.PI*2);fx2d.fill();
+      } else if(p.phase==='hold'){
+        p.holdFrames--;
+        p.x+=(Math.random()-0.5)*0.25;
+        p.y+=(Math.random()-0.5)*0.25;
+        fx2d.globalAlpha=p.life*0.5;
+        fx2d.fillStyle='#ffffff';
+        fx2d.beginPath();fx2d.arc(p.x,p.y,p.size*3,0,Math.PI*2);fx2d.fill();
+        fx2d.globalAlpha=p.life;
+        fx2d.fillStyle=p.color;
+        fx2d.beginPath();fx2d.arc(p.x,p.y,p.size,0,Math.PI*2);fx2d.fill();
+        p.life-=p.decay*0.2;
+        if(p.holdFrames<=0){
+          p.phase='explode';
+          p.vx=Math.cos(p.explodeAngle)*p.explodeSpeed;
+          p.vy=Math.sin(p.explodeAngle)*p.explodeSpeed;
+        }
+      } else {
+        p.x+=p.vx;p.y+=p.vy;p.vy+=0.13;p.vx*=0.97;p.vy*=0.97;
+        p.life-=p.decay;
+        if(p.life<=0){particles2D.splice(i,1);continue;}
+        fx2d.globalAlpha=p.life;
+        fx2d.fillStyle=p.color;
+        fx2d.beginPath();fx2d.arc(p.x,p.y,p.size,0,Math.PI*2);fx2d.fill();
+      }
+      fx2d.globalAlpha=1;
+      continue;
+    }
+
+    // 既存パーティクル（holdFrames方式）
     if(p.holdFrames>0){
       p.holdFrames--;
-      // 待機中：輪郭をグローで描画
-      p.x+=(Math.random()-0.5)*0.4;
-      p.y+=(Math.random()-0.5)*0.4;
-      // 外側グロー
-      fx2d.globalAlpha=p.life*0.35;
-      fx2d.fillStyle='#ffffff';
-      fx2d.beginPath(); fx2d.arc(p.x,p.y,p.size*2.8,0,Math.PI*2); fx2d.fill();
+      p.x+=(Math.random()-0.5)*0.4;p.y+=(Math.random()-0.5)*0.4;
+      fx2d.globalAlpha=p.life*0.35;fx2d.fillStyle='#ffffff';
+      fx2d.beginPath();fx2d.arc(p.x,p.y,p.size*2.8,0,Math.PI*2);fx2d.fill();
     } else {
-      // 爆発フェーズ：通常物理
-      p.x+=p.vx; p.y+=p.vy; p.vy+=0.13; p.vx*=0.97; p.vy*=0.97;
+      p.x+=p.vx;p.y+=p.vy;p.vy+=0.13;p.vx*=0.97;p.vy*=0.97;
     }
     p.life-=p.decay;
     if(p.life<=0){particles2D.splice(i,1);continue;}
-    fx2d.globalAlpha=p.life;
-    fx2d.fillStyle=p.color;
-    fx2d.beginPath(); fx2d.arc(p.x,p.y,p.size,0,Math.PI*2); fx2d.fill();
+    fx2d.globalAlpha=p.life;fx2d.fillStyle=p.color;
+    fx2d.beginPath();fx2d.arc(p.x,p.y,p.size,0,Math.PI*2);fx2d.fill();
+    fx2d.globalAlpha=1;
   }
   fx2d.globalAlpha=1;
 }
