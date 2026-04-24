@@ -23,7 +23,6 @@ body{background:radial-gradient(ellipse at 50% 40%,#180032 0%,#050014 75%);}
 #worldStage{background:radial-gradient(ellipse at 50% 40%,#180032 0%,#050014 75%);}
 #worldCanvas,#cameraCanvas,#viewerCanvas{position:absolute;inset:0;width:100%;height:100%;}
 #cameraVideo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;}
-
 #fxCanvas{position:fixed;inset:0;width:100%;height:100%;z-index:15;pointer-events:none;}
 
 .ui{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;pointer-events:none;}
@@ -66,20 +65,37 @@ body{background:radial-gradient(ellipse at 50% 40%,#180032 0%,#050014 75%);}
 .loading-bar{height:100%;width:0%;background:linear-gradient(90deg,#ff6b00,#ffcc00);transition:width .25s;}
 .prompt-btn{padding:14px 34px;border:none;border-radius:16px;background:linear-gradient(135deg,#ff6b00,#ffcc00);color:#000;font-size:15px;font-weight:900;cursor:pointer;}
 
-/* 作品オーバーレイ：初期は非表示、タップで花火とともに出現 */
+/* 作品オーバーレイ：初期は非表示 */
 .ar-work-overlay{
   position:fixed;object-fit:contain;border-radius:12px;border:2px solid rgba(255,255,255,0.3);
-  pointer-events:auto;z-index:6;
+  pointer-events:auto;z-index:6;cursor:pointer;
   opacity:0;transform:scale(0);transform-origin:center;
   transition:opacity 0.5s ease, transform 0.5s cubic-bezier(0.34,1.56,0.64,1);
 }
 .ar-work-overlay.visible{opacity:1;transform:scale(1);}
+/* 花火化アニメーション：拡大しながらフェードアウト */
+.ar-work-overlay.exploding{
+  opacity:0 !important;
+  transform:scale(2) !important;
+  transition:opacity 0.35s ease, transform 0.4s ease !important;
+  pointer-events:none !important;
+}
+/* 再出現：縮小から弾ける */
+@keyframes pop-in{
+  0%{transform:scale(0);opacity:0;}
+  70%{transform:scale(1.15);opacity:1;}
+  100%{transform:scale(1);opacity:1;}
+}
+.ar-work-overlay.popping{
+  animation:pop-in 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards;
+}
 .ar-work-name{
   position:fixed;text-align:center;font-size:11px;color:#fff;background:rgba(0,0,0,0.62);
   border-radius:10px;padding:2px 6px;pointer-events:none;z-index:6;
   opacity:0;transition:opacity 0.5s ease;
 }
 .ar-work-name.visible{opacity:1;}
+
 @media (max-width:420px){.btn{font-size:10px}.badge{padding:4px 10px}}
 </style>
 </head>
@@ -90,7 +106,6 @@ body{background:radial-gradient(ellipse at 50% 40%,#180032 0%,#050014 75%);}
   <video id="cameraVideo" autoplay playsinline muted></video>
   <canvas id="cameraCanvas"></canvas>
 </div>
-
 <canvas id="fxCanvas"></canvas>
 
 <div class="ui">
@@ -101,10 +116,10 @@ body{background:radial-gradient(ellipse at 50% 40%,#180032 0%,#050014 75%);}
       <div class="sub" id="headerSub">スマホを動かして見渡してね</div>
     </div>
     <div class="badge" id="workCount">0 作品</div>
-    <div class="ver">v5.1</div>
+    <div class="ver">v5.2</div>
   </div>
   <div class="center-status good" id="statusText">✨ タップして作品を出そう！</div>
-  <div class="hint" id="hintText">📱 傾けて見渡そう！タップで作品を出したり消したりできるよ</div>
+  <div class="hint" id="hintText">📱 傾けて見渡そう！作品タップで花火に変身！</div>
   <div id="thumbRail"></div>
   <div class="bottom">
     <div class="btn active" id="btnWorld" onclick="setMode('world')"><span class="bi">🌍</span>ワールド</div>
@@ -191,31 +206,31 @@ const els = {
 };
 
 function advanceLoading(step=1){
-  state.loadingSteps = Math.min(state.loadingGoal, state.loadingSteps+step);
-  els.loadingBar.style.width = (state.loadingSteps/state.loadingGoal*100)+'%';
-  if(state.loadingSteps >= state.loadingGoal) setTimeout(()=>els.loadingScreen.style.display='none', 350);
+  state.loadingSteps=Math.min(state.loadingGoal, state.loadingSteps+step);
+  els.loadingBar.style.width=(state.loadingSteps/state.loadingGoal*100)+'%';
+  if(state.loadingSteps>=state.loadingGoal) setTimeout(()=>els.loadingScreen.style.display='none',350);
 }
 function setStatus(text, good=false){
-  els.statusText.textContent = text;
-  els.statusText.classList.toggle('good', !!good);
+  els.statusText.textContent=text;
+  els.statusText.classList.toggle('good',!!good);
 }
 function updateHeader(){
   if(state.mode==='camera'){
     els.headerTitle.textContent='花火の写真に向けてね';
-    els.headerSub.textContent='カメラ越しに作品を浮かべて見られるよ';
-    els.hintText.textContent='📸 タップで作品を出そう！スマホを動かすと流れて見えるよ';
+    els.headerSub.textContent='作品をタップで花火に変身！';
+    els.hintText.textContent='🎆 作品タップで花火化！空白タップで全部出す/消す';
   } else {
     els.headerTitle.textContent='みんなのAR空間';
     els.headerSub.textContent='スマホを動かして見渡してね';
-    els.hintText.textContent='📱 傾けて見渡そう！タップで作品を出したり消したりできるよ';
+    els.hintText.textContent='📱 作品タップで花火に変身！空白タップで全部出す/消す';
   }
   els.btnWorld.classList.toggle('active', state.mode==='world');
   els.btnCamera.classList.toggle('active', state.mode==='camera');
 }
 function setMode(mode){
-  state.mode = mode;
-  state.worksVisible = false;
-  document.querySelectorAll('.ar-work-overlay').forEach(el=>el.classList.remove('visible'));
+  state.mode=mode;
+  state.worksVisible=false;
+  document.querySelectorAll('.ar-work-overlay').forEach(el=>el.classList.remove('visible','exploding','popping'));
   document.querySelectorAll('.ar-work-name').forEach(el=>el.classList.remove('visible'));
   state.worldObjects.forEach(({mesh})=>{mesh.visible=false;});
   cameraWorks.forEach(({mesh})=>{mesh.visible=false;});
@@ -227,25 +242,113 @@ function setMode(mode){
 }
 
 function makeThumb(work, active=false){
-  const t = document.createElement('div');
-  t.className = 'thumb'+(active?' active':'');
-  t.dataset.id = work.id;
-  t.onclick = ()=>{selectWork(work.id); openViewer();};
-  t.innerHTML = (work.type==='png'&&work.url)
-    ? `<img src="${work.url}" crossorigin="anonymous" alt="${work.name||'作品'}">`
-    : '<div class="icon">🧊</div>';
+  const t=document.createElement('div');
+  t.className='thumb'+(active?' active':'');
+  t.dataset.id=work.id;
+  t.onclick=()=>{selectWork(work.id);openViewer();};
+  t.innerHTML=(work.type==='png'&&work.url)
+    ?`<img src="${work.url}" crossorigin="anonymous" alt="${work.name||'作品'}">`
+    :'<div class="icon">🧊</div>';
   return t;
 }
 function rebuildThumbs(){
   els.thumbRail.innerHTML='';
-  state.works.forEach((w,i)=>els.thumbRail.appendChild(makeThumb(w, i===0&&state.currentWork?.id===w.id)));
+  state.works.forEach((w,i)=>els.thumbRail.appendChild(makeThumb(w,i===0&&state.currentWork?.id===w.id)));
 }
 function selectWork(workId){
-  const work = state.works.find(w=>w.id===workId)||state.works[0]||null;
+  const work=state.works.find(w=>w.id===workId)||state.works[0]||null;
   if(!work) return;
-  state.currentWork = work;
-  document.querySelectorAll('.thumb').forEach(el=>el.classList.toggle('active', el.dataset.id===work.id));
+  state.currentWork=work;
+  document.querySelectorAll('.thumb').forEach(el=>el.classList.toggle('active',el.dataset.id===work.id));
   if(els.viewerModal.style.display==='block') loadViewerWork(work);
+}
+
+// ──────────────────────────────────────────────
+// 🎆 絵が花火化エンジン
+// 画像のピクセルカラーをサンプリングしてパーティクルを生成する
+// ──────────────────────────────────────────────
+function sampleImageColors(imgEl, count) {
+  // すでに読み込まれているimgタグからカラーをサンプリング
+  try {
+    const cv = document.createElement('canvas');
+    cv.width = 32; cv.height = 32;
+    const ctx = cv.getContext('2d');
+    ctx.drawImage(imgEl, 0, 0, 32, 32);
+    const data = ctx.getImageData(0, 0, 32, 32).data;
+    const colors = [];
+    const attempts = count * 4;
+    for(let i=0; i<attempts && colors.length<count; i++){
+      const px = Math.floor(Math.random()*32);
+      const py = Math.floor(Math.random()*32);
+      const idx = (py*32+px)*4;
+      if(data[idx+3] < 40) continue; // 透明スキップ
+      // 明度が低すぎる色はスキップ（黒に近い）
+      if(data[idx]+data[idx+1]+data[idx+2] < 60) continue;
+      colors.push(`rgb(${data[idx]},${data[idx+1]},${data[idx+2]})`);
+    }
+    return colors.length > 0 ? colors : null;
+  } catch(e) {
+    return null; // CORSエラーなどの場合はnullを返す
+  }
+}
+
+function spawnImageBurst(cx, cy, colors) {
+  // 絵の色で大きめのパーティクルバーストを生成
+  const N = 180;
+  for(let i=0; i<N; i++){
+    const color = colors[Math.floor(Math.random()*colors.length)];
+    const angle = Math.random()*Math.PI*2;
+    const speed = 1.5 + Math.random()*11;
+    particles2D.push({
+      x:cx, y:cy,
+      vx:Math.cos(angle)*speed,
+      vy:Math.sin(angle)*speed,
+      color, life:1.0,
+      decay:0.004+Math.random()*0.009, // ゆっくりフェードで長持ち
+      size:3+Math.random()*5
+    });
+  }
+}
+
+function explodeWorkToFirework(imgEl, nameEl, work, cx, cy) {
+  // 連打ガード
+  if(imgEl.dataset.exploding==='1') return;
+  imgEl.dataset.exploding='1';
+
+  setStatus('🎆 '+( work.name||'作品')+'が花火になった！', true);
+
+  // 1. 爆発アニメーション（拡大フェードアウト）
+  imgEl.classList.remove('visible','popping');
+  void imgEl.offsetWidth; // reflow
+  imgEl.classList.add('exploding');
+  if(nameEl) nameEl.classList.remove('visible');
+
+  // 2. 画像ピクセルからカラーをサンプリングしてバースト
+  const colors = sampleImageColors(imgEl, 60);
+
+  // 250ms後にパーティクル爆発（画像が消えるタイミングに合わせる）
+  setTimeout(()=>{
+    if(colors && colors.length > 0){
+      spawnImageBurst(cx, cy, colors);
+    } else {
+      // CORSなどでサンプリング失敗時はデフォルト花火
+      spawnBurst(cx, cy, true);
+    }
+    playWhistle();
+    setTimeout(()=>playBoom(0.15), 420);
+  }, 250);
+
+  // 3. 3秒後に再出現（ポンッと弾けて戻る）
+  setTimeout(()=>{
+    imgEl.classList.remove('exploding');
+    void imgEl.offsetWidth;
+    imgEl.classList.add('visible','popping');
+    if(nameEl) nameEl.classList.add('visible');
+    imgEl.dataset.exploding='0';
+
+    // pop-inアニメ終了後にpoppingクラスを外す
+    setTimeout(()=>imgEl.classList.remove('popping'), 600);
+  }, 3000);
 }
 
 // ── ワールドレンダラー ──
@@ -261,25 +364,25 @@ worldScene.add(new THREE.AmbientLight(0xffffff, 2));
 const worldDir = new THREE.DirectionalLight(0xffffff,1); worldDir.position.set(1,2,1); worldScene.add(worldDir);
 
 (function createStars(){
-  const geo = new THREE.BufferGeometry();
-  const pos = [];
+  const geo=new THREE.BufferGeometry();
+  const pos=[];
   for(let i=0;i<2000;i++){
-    const r=80, th=Math.random()*Math.PI*2, ph=Math.acos(2*Math.random()-1);
-    pos.push(r*Math.sin(ph)*Math.cos(th), r*Math.sin(ph)*Math.sin(th), r*Math.cos(ph));
+    const r=80,th=Math.random()*Math.PI*2,ph=Math.acos(2*Math.random()-1);
+    pos.push(r*Math.sin(ph)*Math.cos(th),r*Math.sin(ph)*Math.sin(th),r*Math.cos(ph));
   }
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
-  worldScene.add(new THREE.Points(geo, new THREE.PointsMaterial({color:0xffffff,size:0.3,transparent:true,opacity:0.8})));
+  geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
+  worldScene.add(new THREE.Points(geo,new THREE.PointsMaterial({color:0xffffff,size:0.3,transparent:true,opacity:0.8})));
 })();
 
-function placeOnSphere(theta, phi, radius){
-  return new THREE.Vector3(radius*Math.cos(phi)*Math.cos(theta), radius*Math.sin(phi), radius*Math.cos(phi)*Math.sin(theta));
+function placeOnSphere(theta,phi,radius){
+  return new THREE.Vector3(radius*Math.cos(phi)*Math.cos(theta),radius*Math.sin(phi),radius*Math.cos(phi)*Math.sin(theta));
 }
 function textureFromWork(work){
-  const cv = document.createElement('canvas'); cv.width=256; cv.height=256;
-  const ctx = cv.getContext('2d');
-  const g = ctx.createLinearGradient(0,0,256,256);
-  g.addColorStop(0, work.type==='glb'?'#7b5cff':'#ff8a00');
-  g.addColorStop(1, work.type==='glb'?'#36245f':'#7a1f00');
+  const cv=document.createElement('canvas'); cv.width=256; cv.height=256;
+  const ctx=cv.getContext('2d');
+  const g=ctx.createLinearGradient(0,0,256,256);
+  g.addColorStop(0,work.type==='glb'?'#7b5cff':'#ff8a00');
+  g.addColorStop(1,work.type==='glb'?'#36245f':'#7a1f00');
   ctx.fillStyle=g; ctx.fillRect(0,0,256,256);
   ctx.fillStyle='rgba(255,255,255,0.18)'; ctx.fillRect(14,14,228,228);
   if(work.type==='png'&&work.url){
@@ -298,6 +401,7 @@ function textureFromWork(work){
   }
   return new THREE.CanvasTexture(cv);
 }
+
 function rebuildWorldObjects(){
   state.worldObjects.forEach(o=>worldScene.remove(o.mesh)); state.worldObjects=[];
   state.works.forEach((work,i)=>{
@@ -309,8 +413,10 @@ function rebuildWorldObjects(){
       new THREE.MeshBasicMaterial({map:textureFromWork(work),transparent:true,side:THREE.DoubleSide,depthWrite:false})
     );
     mesh.position.copy(pos); mesh.lookAt(0,0,0);
-    mesh.userData.baseY=pos.y; mesh.userData.floatSpeed=0.6+Math.random()*0.4; mesh.userData.floatPhase=Math.random()*Math.PI*2;
-    mesh.visible=false; // 初期非表示
+    mesh.userData.baseY=pos.y; mesh.userData.floatSpeed=0.6+Math.random()*0.4;
+    mesh.userData.floatPhase=Math.random()*Math.PI*2;
+    mesh.userData.work=work;
+    mesh.visible=false;
     worldScene.add(mesh); state.worldObjects.push({mesh,work});
   });
   state.worldReady=true; advanceLoading();
@@ -342,18 +448,26 @@ function rebuildCameraOverlays(){
     if(work.type==='png'&&work.url){
       const imgEl=document.createElement('img');
       imgEl.src=work.url; imgEl.className='ar-work-overlay';
+      imgEl.crossOrigin='anonymous';
       imgEl.dataset.baseX=String(cx-60); imgEl.dataset.baseY=String(cy-60);
       imgEl.dataset.cx=String(cx); imgEl.dataset.cy=String(cy);
       imgEl.dataset.height='120'; imgEl.dataset.workId=work.id;
+      imgEl.dataset.exploding='0';
       imgEl.style.left=(cx-60)+'px'; imgEl.style.top=(cy-60)+'px';
       imgEl.style.width='120px'; imgEl.style.height='120px';
-      imgEl.addEventListener('click',e=>{e.stopPropagation(); selectWork(work.id); openViewer();});
-      document.body.appendChild(imgEl);
+
       const nameEl=document.createElement('div');
       nameEl.id='name_'+work.id; nameEl.className='ar-work-name';
       nameEl.textContent=work.name||'なまえなし';
       nameEl.style.left=(cx-60)+'px'; nameEl.style.top=(cy+65)+'px'; nameEl.style.width='120px';
+      document.body.appendChild(imgEl);
       document.body.appendChild(nameEl);
+
+      // タップで花火化！
+      imgEl.addEventListener('click', e=>{
+        e.stopPropagation();
+        explodeWorkToFirework(imgEl, nameEl, work, cx, cy);
+      });
     } else {
       const mesh=new THREE.Mesh(
         new THREE.PlaneGeometry(0.9,0.9),
@@ -361,8 +475,8 @@ function rebuildCameraOverlays(){
       );
       mesh.position.set(x,y,0);
       mesh.userData.baseY=y; mesh.userData.phase=Math.random()*Math.PI*2;
-      mesh.userData.cx=cx; mesh.userData.cy=cy;
-      mesh.visible=false; // 初期非表示
+      mesh.userData.cx=cx; mesh.userData.cy=cy; mesh.userData.work=work;
+      mesh.visible=false;
       cameraScene.add(mesh); cameraWorks.push({mesh,work});
     }
   });
@@ -377,7 +491,7 @@ function startCamera(){
     .catch(()=>setStatus('カメラの許可が必要です', false));
 }
 
-// ── ジャイロ（ワールド:Quaternion、カメラオーバーレイ:連続追跡） ──
+// ── ジャイロ ──
 let gyroYaw=0, gyroPitch=0, prevAlpha=null;
 const zee=new THREE.Vector3(0,0,1);
 const euler_g=new THREE.Euler();
@@ -391,31 +505,29 @@ function updateOverlayPositions(){
     const newLeft=baseX+gyroYaw*4, newTop=baseY+gyroPitch*4;
     el.style.left=newLeft+'px'; el.style.top=newTop+'px';
     const nameEl=document.getElementById('name_'+el.dataset.workId);
-    if(nameEl){ nameEl.style.left=newLeft+'px'; nameEl.style.top=(newTop+parseInt(el.dataset.height||'120',10)+5)+'px'; }
+    if(nameEl){nameEl.style.left=newLeft+'px'; nameEl.style.top=(newTop+parseInt(el.dataset.height||'120',10)+5)+'px';}
   });
 }
 
-// ── 作品トグル（タップで花火とともに出現・消滅） ──
+// ── 作品トグル（空白タップ）──
 function showWorks(){
   state.worksVisible=true;
-  setStatus('🎆 作品が現れた！もう一回タップで消えるよ', true);
-  // カメラオーバーレイを順番にバーストで出す
+  setStatus('🎆 作品が現れた！作品をタップすると花火に変身！', true);
   document.querySelectorAll('.ar-work-overlay').forEach((el,i)=>{
     setTimeout(()=>{
+      el.classList.remove('exploding','popping');
       el.classList.add('visible');
       const nameEl=document.getElementById('name_'+el.dataset.workId);
       if(nameEl) nameEl.classList.add('visible');
       spawnBurst(parseFloat(el.dataset.cx||0), parseFloat(el.dataset.cy||0), true);
     }, i*200);
   });
-  // カメラ3Dメッシュ
   cameraWorks.forEach(({mesh},i)=>{
     setTimeout(()=>{
       mesh.visible=true;
       spawnBurst(mesh.userData.cx||window.innerWidth/2, mesh.userData.cy||window.innerHeight/2, true);
     }, i*200);
   });
-  // ワールドオブジェクト（スクリーン投影してバースト）
   state.worldObjects.forEach(({mesh},i)=>{
     setTimeout(()=>{
       mesh.visible=true;
@@ -428,13 +540,13 @@ function showWorks(){
 function hideWorks(){
   state.worksVisible=false;
   setStatus(state.mode==='camera'?'📷 タップして作品を出そう！':'✨ タップして作品を出そう！', true);
-  document.querySelectorAll('.ar-work-overlay').forEach(el=>el.classList.remove('visible'));
+  document.querySelectorAll('.ar-work-overlay').forEach(el=>el.classList.remove('visible','popping'));
   document.querySelectorAll('.ar-work-name').forEach(el=>el.classList.remove('visible'));
   cameraWorks.forEach(({mesh})=>{mesh.visible=false;});
   state.worldObjects.forEach(({mesh})=>{mesh.visible=false;});
 }
 
-// ── 花火エフェクト（音量は元の30%） ──
+// ── 花火エフェクト（音量30%） ──
 const fxCanvas=document.getElementById('fxCanvas');
 fxCanvas.width=window.innerWidth; fxCanvas.height=window.innerHeight;
 const fx2d=fxCanvas.getContext('2d');
@@ -445,26 +557,26 @@ function getAudio(){
   if(audioCtx.state==='suspended') audioCtx.resume();
   return audioCtx;
 }
-function playBoom(vol=0.09){ // デフォルト0.09 (元の0.3の30%)
+function playBoom(vol=0.09){
   try {
-    const ctx=getAudio(), sr=ctx.sampleRate, n=Math.floor(sr*0.5);
-    const buf=ctx.createBuffer(1,n,sr), d=buf.getChannelData(0);
+    const ctx=getAudio(),sr=ctx.sampleRate,n=Math.floor(sr*0.5);
+    const buf=ctx.createBuffer(1,n,sr),d=buf.getChannelData(0);
     for(let i=0;i<n;i++) d[i]=(Math.random()*2-1)*Math.exp(-i/(n*0.12));
     const src=ctx.createBufferSource(); src.buffer=buf;
     const g=ctx.createGain();
-    g.gain.setValueAtTime(vol, ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+0.5);
+    g.gain.setValueAtTime(vol,ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.5);
     src.connect(g); g.connect(ctx.destination); src.start();
   } catch(e){}
 }
 function playWhistle(){
   try {
-    const ctx=getAudio(), osc=ctx.createOscillator(), g=ctx.createGain();
+    const ctx=getAudio(),osc=ctx.createOscillator(),g=ctx.createGain();
     osc.connect(g); g.connect(ctx.destination); osc.type='sine';
-    osc.frequency.setValueAtTime(300, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(1500, ctx.currentTime+0.45);
-    g.gain.setValueAtTime(0.03, ctx.currentTime); // 元の0.1の30%
-    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+0.45);
+    osc.frequency.setValueAtTime(300,ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(1500,ctx.currentTime+0.45);
+    g.gain.setValueAtTime(0.03,ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.45);
     osc.start(ctx.currentTime); osc.stop(ctx.currentTime+0.45);
   } catch(e){}
 }
@@ -472,11 +584,11 @@ function spawnBurst(x,y,big=false){
   const colors=['#ff4444','#ff8800','#ffee00','#44ff88','#4488ff','#cc44ff','#ff88cc','#44ffdd'];
   const color=colors[Math.floor(Math.random()*colors.length)];
   for(let i=0;i<(big?70:40);i++){
-    const angle=Math.random()*Math.PI*2, speed=1.5+Math.random()*(big?8:5);
+    const angle=Math.random()*Math.PI*2,speed=1.5+Math.random()*(big?8:5);
     particles2D.push({x,y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,color,life:1,decay:0.012+Math.random()*0.018,size:2+Math.random()*(big?4:2.5)});
   }
   playWhistle();
-  setTimeout(()=>playBoom(big?0.12:0.075), 420); // 元の0.4/0.25の30%
+  setTimeout(()=>playBoom(big?0.12:0.075),420);
 }
 function renderFX(){
   fx2d.clearRect(0,0,fxCanvas.width,fxCanvas.height);
@@ -490,31 +602,86 @@ function renderFX(){
   fx2d.globalAlpha=1;
 }
 
-// ── タップで作品トグル ──
-function handleTap(e){
+// ── ワールドモード：レイキャストで作品タップを検出 ──
+const worldRaycaster=new THREE.Raycaster();
+const worldMouse=new THREE.Vector2();
+
+function handleWorldClick(e){
+  try{getAudio().resume();}catch(err){}
+
+  worldMouse.x=(e.clientX/window.innerWidth)*2-1;
+  worldMouse.y=-(e.clientY/window.innerHeight)*2+1;
+  worldRaycaster.setFromCamera(worldMouse, worldCamera);
+
+  const visibleMeshes=state.worldObjects.filter(o=>o.mesh.visible).map(o=>o.mesh);
+  const hits=worldRaycaster.intersectObjects(visibleMeshes);
+
+  if(hits.length>0){
+    // 作品がヒットしたら花火化
+    const hitMesh=hits[0].object;
+    const hitObj=state.worldObjects.find(o=>o.mesh===hitMesh);
+    if(hitObj && hitObj.mesh.userData.exploding !== '1'){
+      hitMesh.userData.exploding='1';
+      const v=hitMesh.position.clone().project(worldCamera);
+      const sx=(v.x+1)/2*window.innerWidth, sy=-(v.y-1)/2*window.innerHeight;
+      setStatus('🎆 '+(hitObj.work.name||'作品')+'が花火になった！', true);
+
+      // ワールドメッシュを一時的に非表示
+      hitMesh.visible=false;
+
+      // 作品の画像URLからカラーサンプリングして爆発
+      if(hitObj.work.type==='png'&&hitObj.work.url){
+        const tmpImg=new Image(); tmpImg.crossOrigin='anonymous';
+        tmpImg.onload=()=>{
+          const colors=sampleImageColors(tmpImg,60);
+          if(colors&&colors.length>0) spawnImageBurst(sx,sy,colors);
+          else spawnBurst(sx,sy,true);
+          playWhistle(); setTimeout(()=>playBoom(0.15),420);
+        };
+        tmpImg.onerror=()=>{ spawnBurst(sx,sy,true); playWhistle(); setTimeout(()=>playBoom(0.15),420); };
+        tmpImg.src=hitObj.work.url;
+      } else {
+        spawnBurst(sx,sy,true);
+      }
+
+      // 3秒後に再出現
+      setTimeout(()=>{
+        hitMesh.visible=true;
+        hitMesh.userData.exploding='0';
+      }, 3000);
+    }
+  } else {
+    // 空白タップ：全作品トグル
+    spawnBurst(e.clientX, e.clientY, false);
+    if(!state.worksVisible) showWorks();
+    else hideWorks();
+  }
+}
+
+// カメラモードの空白タップ（作品はそれ自体のクリックハンドラで処理）
+function handleCameraCanvasClick(e){
   try{getAudio().resume();}catch(err){}
   spawnBurst(e.clientX, e.clientY, false);
   if(!state.worksVisible) showWorks();
   else hideWorks();
 }
+
 cameraCanvas.style.pointerEvents='auto';
-cameraCanvas.addEventListener('click', handleTap);
-worldCanvas.addEventListener('click', handleTap);
+cameraCanvas.addEventListener('click', handleCameraCanvasClick);
+worldCanvas.addEventListener('click', handleWorldClick);
 
 // ── ジャイロ設定 ──
 function startGyro(){
   state.useGyro=true;
-  window.addEventListener('deviceorientation', (e)=>{
+  window.addEventListener('deviceorientation',(e)=>{
     if(e.alpha===null) return;
-    // ワールドカメラ（Quaternion方式で正確に空間固定）
     const heading=e.webkitCompassHeading!=null
-      ? THREE.MathUtils.degToRad(e.webkitCompassHeading)
-      : THREE.MathUtils.degToRad(360-e.alpha);
-    euler_g.set(THREE.MathUtils.degToRad(e.beta), THREE.MathUtils.degToRad(e.alpha), THREE.MathUtils.degToRad(-e.gamma), 'YXZ');
+      ?THREE.MathUtils.degToRad(e.webkitCompassHeading)
+      :THREE.MathUtils.degToRad(360-e.alpha);
+    euler_g.set(THREE.MathUtils.degToRad(e.beta),THREE.MathUtils.degToRad(e.alpha),THREE.MathUtils.degToRad(-e.gamma),'YXZ');
     worldCamera.quaternion.setFromEuler(euler_g);
     worldCamera.quaternion.multiply(q1_g);
-    worldCamera.quaternion.multiply(q0_g.setFromAxisAngle(zee, -heading));
-    // カメラオーバーレイ（連続追跡：ラップアラウンドしない）
+    worldCamera.quaternion.multiply(q0_g.setFromAxisAngle(zee,-heading));
     if(prevAlpha!==null){
       let da=e.alpha-prevAlpha;
       if(da>180)da-=360; if(da<-180)da+=360;
@@ -522,7 +689,7 @@ function startGyro(){
     }
     prevAlpha=e.alpha;
     gyroPitch=(e.beta||0)-90;
-  }, true);
+  },true);
 }
 function requestGyroPermission(){
   DeviceOrientationEvent.requestPermission().then(s=>{
@@ -530,14 +697,12 @@ function requestGyroPermission(){
     if(s==='granted') startGyro();
   }).catch(()=>els.gyroPrompt.style.display='none');
 }
-// iPhone：許可ボタン表示、Android：そのまま起動
 if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){
   els.gyroPrompt.style.display='flex';
 } else if(typeof DeviceOrientationEvent!=='undefined'){
   startGyro();
 }
 
-// マウス操作（PC用）
 let mouseDown=false, lastMX=0, lastMY=0;
 worldCanvas.addEventListener('mousedown',e=>{mouseDown=true;lastMX=e.clientX;lastMY=e.clientY;});
 worldCanvas.addEventListener('mousemove',e=>{
@@ -638,14 +803,18 @@ db.ref('works').on('value',(snap)=>{
 
 // ── メインループ ──
 let time=0;
-function animate(now){
+function animate(){
   requestAnimationFrame(animate); time+=0.016;
   if(!state.useGyro){worldCamera.rotation.order='YXZ';worldCamera.rotation.y=state.yaw;worldCamera.rotation.x=state.pitch;}
   state.worldObjects.forEach(({mesh})=>{
-    mesh.position.y=mesh.userData.baseY+Math.sin(time*mesh.userData.floatSpeed+mesh.userData.floatPhase)*0.15;
-    mesh.lookAt(0,0,0);
+    if(mesh.visible){
+      mesh.position.y=mesh.userData.baseY+Math.sin(time*mesh.userData.floatSpeed+mesh.userData.floatPhase)*0.15;
+      mesh.lookAt(0,0,0);
+    }
   });
-  cameraWorks.forEach(({mesh})=>{mesh.position.y=mesh.userData.baseY+Math.sin(time+mesh.userData.phase)*0.06;});
+  cameraWorks.forEach(({mesh})=>{
+    if(mesh.visible) mesh.position.y=mesh.userData.baseY+Math.sin(time+mesh.userData.phase)*0.06;
+  });
   updateOverlayPositions(); renderFX();
   if(!els.worldStage.classList.contains('hidden')) worldRenderer.render(worldScene,worldCamera);
   if(!els.cameraStage.classList.contains('hidden')) cameraRenderer.render(cameraScene,cameraThreeCamera);
