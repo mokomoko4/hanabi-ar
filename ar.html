@@ -5,10 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>花火AR</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://raw.githack.com/AR-js-org/AR.js/3.4.5/three.js/build/ar-threex.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;touch-action:none;}
+#vid{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;}
 #cv{position:fixed;inset:0;width:100%;height:100%;z-index:1;touch-action:none;}
 #ui{position:fixed;bottom:0;left:0;right:0;padding-bottom:46px;z-index:2;
     pointer-events:none;display:flex;justify-content:center;}
@@ -17,29 +17,27 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;touch-action:no
       text-shadow:0 2px 14px rgba(0,0,0,.95);
       animation:hp 3s ease-in-out infinite;}
 @keyframes hp{0%,100%{opacity:.4}55%{opacity:.95}}
-/* バージョン */
 .ver{position:fixed;bottom:8px;right:12px;z-index:4;
      font:10px/1 monospace;color:rgba(255,255,255,.28);pointer-events:none;}
 /* 打ち上げ方向インジケーター */
 #launchDir{position:fixed;top:0;left:0;right:0;z-index:3;pointer-events:none;
            display:flex;flex-direction:column;align-items:center;padding-top:22px;gap:4px;
-           opacity:0;transition:opacity .25s;}
+           opacity:0;transition:opacity .2s;}
 #launchDir.show{opacity:1;}
 .ud-arrow{font:40px/1 sans-serif;color:#ffdd00;
           text-shadow:0 0 20px #ff8800,0 0 40px #ff4400;
-          animation:udbounce .55s ease-in-out infinite;}
-@keyframes udbounce{0%,100%{transform:translateY(4px);}50%{transform:translateY(-6px);}}
+          animation:udb .55s ease-in-out infinite;}
+@keyframes udb{0%,100%{transform:translateY(4px);}50%{transform:translateY(-6px);}}
 .ud-label{font:11px/1 'Hiragino Kaku Gothic ProN',sans-serif;
           color:rgba(255,220,80,.9);letter-spacing:.12em;
           text-shadow:0 2px 12px rgba(255,120,0,.9);}
-/* マーカー情報パネル */
+/* AR マーカーパネル */
 #markerPanel{position:fixed;top:16px;left:16px;z-index:3;pointer-events:none;
              background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.18);
              border-radius:10px;padding:8px 14px;
              color:rgba(255,255,255,.8);
              font:11px/1.7 'Hiragino Kaku Gothic ProN',sans-serif;
              display:none;}
-#markerPanel b{color:#ffdd44;}
 #xrbtn{position:fixed;top:18px;right:16px;z-index:3;pointer-events:auto;
        padding:8px 18px;border:1px solid rgba(255,255,255,.3);
        background:rgba(0,0,0,.45);border-radius:20px;color:#fff;
@@ -56,16 +54,16 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;touch-action:no
 </head>
 <body>
 
+<!-- カメラ映像（AR.js 起動前/非対応時のベース） -->
+<video id="vid" autoplay playsinline muted></video>
 <canvas id="cv"></canvas>
 <div id="ui"><span class="hint" id="hintTxt">タップで花火打ち上げ 🎆</span></div>
 
-<!-- 打ち上げ方向インジケーター（ロケット発射時に表示） -->
 <div id="launchDir">
   <div class="ud-arrow">↑</div>
   <div class="ud-label">打ち上げ中</div>
 </div>
 
-<!-- AR マーカーパネル -->
 <div id="markerPanel">
   <div id="markerStatus">📷 マーカー: 未検出</div>
   <div style="font-size:10px;opacity:.55;margin-top:1px">Hiro マーカーをかざしてください</div>
@@ -97,52 +95,70 @@ const cam = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.05, 500);
 cam.position.set(0, 0, 0);
 
 // ══════════════════════════════════════════════
-// AR.js マーカー追跡
+// カメラ映像（即時起動 — AR.js とは独立）
 // ══════════════════════════════════════════════
 
-const arAvail = typeof THREEx !== 'undefined';
-let arSource = null, arContext = null, markerGroup = null;
-let lastMarkerLaunch = 0;
+const vid = document.getElementById('vid');
+navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}})
+  .then(s=>{ vid.srcObject = s; })
+  .catch(()=>{ vid.style.display='none'; document.body.style.background='#04001a'; });
+
+// ══════════════════════════════════════════════
+// AR.js マーカー追跡（非同期ロード・完全オプション）
+// ══════════════════════════════════════════════
+
+let arSource=null, arContext=null, markerGroup=null, lastMarkerLaunch=0;
 const _mPos = new THREE.Vector3();
 
-if(arAvail){
-  arSource = new THREEx.ArToolkitSource({ sourceType: 'webcam' });
-  arSource.init(function onReady(){
-    document.getElementById('markerPanel').style.display = 'block';
-    document.getElementById('hintTxt').textContent =
-      'Hiro マーカーをかざすか、タップで花火打ち上げ 🎆';
-    _onARResize();
-  }, function onError(e){ console.warn('AR source error', e); });
+function initAR(){
+  if(typeof THREEx === 'undefined') return;
+  try{
+    arSource = new THREEx.ArToolkitSource({ sourceType: 'webcam' });
+    arSource.init(function onReady(){
+      // AR.js が独自カメラを持つのでマニュアル video を隠す
+      vid.style.display = 'none';
+      document.getElementById('markerPanel').style.display = 'block';
+      document.getElementById('hintTxt').textContent =
+        'Hiro マーカーをかざすか、タップで打ち上げ 🎆';
+      _onARResize();
+    }, function onError(e){
+      console.warn('AR source error:', e);
+      arSource = null;
+      vid.style.display = ''; // フォールバック
+    });
 
-  arContext = new THREEx.ArToolkitContext({
-    cameraParametersUrl:
-      'https://raw.githack.com/AR-js-org/AR.js/3.4.5/data/data/camera_para.dat',
-    detectionMode: 'mono',
-  });
-  arContext.init(function onCompleted(){
-    cam.projectionMatrix.copy(arContext.getProjectionMatrix());
-  });
+    arContext = new THREEx.ArToolkitContext({
+      cameraParametersUrl:
+        'https://raw.githack.com/AR-js-org/AR.js/3.4.5/data/data/camera_para.dat',
+      detectionMode: 'mono',
+    });
+    arContext.init(function onCompleted(){
+      cam.projectionMatrix.copy(arContext.getProjectionMatrix());
+    });
 
-  markerGroup = new THREE.Group();
-  scene.add(markerGroup);
+    markerGroup = new THREE.Group();
+    scene.add(markerGroup);
 
-  new THREEx.ArMarkerControls(arContext, markerGroup, {
-    type: 'pattern',
-    patternUrl:
-      'https://raw.githack.com/AR-js-org/AR.js/3.4.5/data/data/patt.hiro',
-  });
-} else {
-  // AR.js 未ロード時はカメラを自前で取得
-  const vid = document.createElement('video');
-  Object.assign(vid, {autoplay:true, playsInline:true, muted:true});
-  vid.setAttribute('playsinline','');
-  vid.style.cssText =
-    'position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;';
-  document.body.prepend(vid);
-  navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}})
-    .then(s=>{ vid.srcObject = s; })
-    .catch(()=>{ document.body.style.background = '#04001a'; });
+    new THREEx.ArMarkerControls(arContext, markerGroup, {
+      type: 'pattern',
+      patternUrl:
+        'https://raw.githack.com/AR-js-org/AR.js/3.4.5/data/data/patt.hiro',
+    });
+  }catch(e){
+    console.warn('AR.js 初期化失敗:', e);
+    arSource = null;
+    vid.style.display = '';
+  }
 }
+
+// AR.js を非同期でロード（メインの描画を一切ブロックしない）
+(function loadARjs(){
+  const s = document.createElement('script');
+  s.src = 'https://raw.githack.com/AR-js-org/AR.js/3.4.5/three.js/build/ar-threex.js';
+  s.onload  = initAR;
+  s.onerror = ()=> console.log('AR.js 未ロード — タップモードで動作');
+  document.head.appendChild(s);
+})();
 
 function _onARResize(){
   if(!arSource || !arSource.ready) return;
@@ -157,21 +173,20 @@ function updateMarkerLaunch(){
   if(!markerGroup) return;
   const vis = markerGroup.visible;
   const statusEl = document.getElementById('markerStatus');
-
   if(!vis){
     if(statusEl) statusEl.textContent = '📷 マーカー: 未検出';
     return;
   }
-  if(statusEl) statusEl.innerHTML = '✅ マーカー: <b>検出中</b>';
+  if(statusEl) statusEl.innerHTML = '✅ マーカー: 検出中';
 
   if(Date.now() - lastMarkerLaunch < 3200) return;
   lastMarkerLaunch = Date.now();
 
-  // マーカーのスクリーン位置を求め、標準のワールド座標に変換
+  // マーカーのスクリーン位置 → 標準ワールド座標へ変換
   markerGroup.getWorldPosition(_mPos);
   const sp = _mPos.clone().project(cam);
-  const sx = (sp.x *  0.5 + 0.5) * innerWidth;
-  const sy = (sp.y * -0.5 + 0.5) * innerHeight;
+  const sx = ( sp.x * 0.5 + 0.5) * innerWidth;
+  const sy = (-sp.y * 0.5 + 0.5) * innerHeight;
   const wz = -11 - Math.random()*3;
   const wp = tapToWorld(sx, sy, wz);
   const wy1 = Math.max(1.5, Math.min(8.0, wp.y + 3 + Math.random()*2));
@@ -180,7 +195,7 @@ function updateMarkerLaunch(){
 }
 
 // ══════════════════════════════════════════════
-// 打ち上げ方向インジケーター（3D + CSS）
+// 打ち上げ方向インジケーター
 // ══════════════════════════════════════════════
 
 const arrowHelper = new THREE.ArrowHelper(
@@ -201,7 +216,7 @@ const launchDirEl = document.getElementById('launchDir');
 function showLaunchIndicator(x, y0, z, y1){
   const len = Math.max(1.5, y1 - y0);
   arrowHelper.position.set(x, y0, z);
-  arrowHelper.setLength(len, Math.min(1.2, len*0.15), Math.min(0.55, len*0.07));
+  arrowHelper.setLength(len, Math.min(1.2, len*.15), Math.min(0.55, len*.07));
   arrowHelper.visible = true;
   arrowHelper.line.material.opacity = 0.85;
   arrowHelper.cone.material.opacity = 0.85;
@@ -219,7 +234,6 @@ function updateArrowIndicator(){
   const t = arrowFrames / 100;
   arrowHelper.line.material.opacity = 0.85 * t;
   arrowHelper.cone.material.opacity = 0.85 * t;
-  if(arrowFrames === 0) launchDirEl.classList.remove('show');
 }
 
 // ══════════════════════════════════════════════
@@ -264,7 +278,7 @@ geo.setDrawRange(0,0);
 scene.add(new THREE.Points(geo, mat));
 
 // ══════════════════════════════════════════════
-// パーティクル 状態配列
+// パーティクル状態配列
 // ══════════════════════════════════════════════
 
 const ps = [];
@@ -429,8 +443,8 @@ const R = THREE.MathUtils.degToRad;
 
 function updateCamera(){
   if(xrActive) return;
-  // AR.js 使用中はカメラをアイデンティティに保つ（マーカー追跡が pose を管理）
-  if(arAvail && arSource && arSource.ready){
+  if(arSource && arSource.ready){
+    // AR.js がポーズ管理 → カメラをアイデンティティに保つ
     cam.position.set(0,0,0);
     cam.rotation.set(0,0,0);
     return;
@@ -546,8 +560,8 @@ function boom(vol=0.30){
 // ══════════════════════════════════════════════
 
 function tick(){
-  if(arAvail && arSource && arSource.ready){
-    arContext.update(arSource.domElement);
+  if(arSource && arSource.ready){
+    try{ arContext.update(arSource.domElement); }catch(_){}
     updateMarkerLaunch();
   }
   updateCamera();
@@ -571,18 +585,7 @@ window.addEventListener('resize',()=>{
   _onARResize();
 });
 
-// ══════════════════════════════════════════════
-// 初回デモ（ページロード時に自動打ち上げ）
-// ══════════════════════════════════════════════
-
 checkPerm();
-
-function autoLaunch(x, wy1, wz, palIdx, delay){
-  setTimeout(()=>{ launch(x, wy1, wz, PALETTES[palIdx]); }, delay);
-}
-autoLaunch(-1.4, 4.8, -12, 0, 1100);
-autoLaunch( 1.6, 5.2, -11, 1, 2600);
-autoLaunch(-0.3, 6.0, -13, 4, 4300);
 </script>
 </body>
 </html>
