@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>花火AR</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;touch-action:none;}
@@ -19,7 +21,6 @@ canvas{position:fixed;inset:0;z-index:9999;pointer-events:none;}
 @keyframes hp{0%,100%{opacity:.4}55%{opacity:.95}}
 .ver{position:fixed;bottom:8px;right:12px;z-index:10001;
      font:10px/1 monospace;color:rgba(255,255,255,.28);pointer-events:none;}
-/* 打ち上げ方向インジケーター */
 #launchDir{position:fixed;top:0;left:0;right:0;z-index:10001;pointer-events:none;
            display:flex;flex-direction:column;align-items:center;padding-top:22px;gap:4px;
            opacity:0;transition:opacity .2s;}
@@ -48,14 +49,14 @@ canvas{position:fixed;inset:0;z-index:9999;pointer-events:none;}
 <body>
 
 <video id="vid" autoplay playsinline muted></video>
-<div id="ui"><span class="hint">タップで花火打ち上げ 🎆</span></div>
+<div id="ui"><span class="hint" id="hintTxt">タップで花火打ち上げ 🎆</span></div>
 
 <div id="launchDir">
   <div class="ud-arrow">↑</div>
   <div class="ud-label">打ち上げ中</div>
 </div>
 
-<div class="ver">v7.2</div>
+<div class="ver">v7.4</div>
 <button id="xrbtn" onclick="enterXR()">AR モード ✦</button>
 <div id="perm">
   <div style="font-size:14px;line-height:2;opacity:.85">
@@ -66,6 +67,33 @@ canvas{position:fixed;inset:0;z-index:9999;pointer-events:none;}
 </div>
 
 <script>
+// ══════════════════════════════════════════════
+// Firebase
+// ══════════════════════════════════════════════
+
+firebase.initializeApp({
+  apiKey:"AIzaSyDGlQeMC6iJzWAB16teP_5oC2FeBcgZxmA",
+  authDomain:"hanabi-ar-1754a.firebaseapp.com",
+  databaseURL:"https://hanabi-ar-1754a-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId:"hanabi-ar-1754a",
+  storageBucket:"hanabi-ar-1754a.firebasestorage.app",
+  messagingSenderId:"861479696200",
+  appId:"1:861479696200:web:393add8997cf25affd657d"
+});
+const db = firebase.database();
+
+let works = [];
+db.ref('works').once('value', snap => {
+  const data = snap.val() || {};
+  works = Object.entries(data)
+    .map(([k,v]) => ({id:k,...v}))
+    .filter(w => w.type === 'png' && w.url);
+  if(works.length > 0){
+    document.getElementById('hintTxt').textContent =
+      `タップで絵を花火に！🎆 (${works.length}作品)`;
+  }
+}).catch(()=>{});
+
 // ══════════════════════════════════════════════
 // Three.js セットアップ
 // ══════════════════════════════════════════════
@@ -80,31 +108,23 @@ const scene = new THREE.Scene();
 const cam = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.05, 500);
 cam.position.set(0, 0, 0);
 
-
 // ══════════════════════════════════════════════
 // カメラ映像
 // ══════════════════════════════════════════════
 
 const vid = document.getElementById('vid');
 navigator.mediaDevices.getUserMedia({
-  video: { facingMode: {ideal: 'environment'}, width: {ideal: 1280} }
+  video: { facingMode: {ideal:'environment'}, width: {ideal:1280} }
 })
-.then(s => {
-  vid.srcObject = s;
-  vid.play().catch(()=>{});
-})
-.catch(() => {
-  vid.style.display = 'none';
-  document.body.style.background = '#04001a';
-});
+.then(s => { vid.srcObject = s; vid.play().catch(()=>{}); })
+.catch(() => { vid.style.display='none'; document.body.style.background='#04001a'; });
 
 // ══════════════════════════════════════════════
 // 打ち上げ方向インジケーター
 // ══════════════════════════════════════════════
 
 const arrowHelper = new THREE.ArrowHelper(
-  new THREE.Vector3(0,1,0),
-  new THREE.Vector3(0,0,0),
+  new THREE.Vector3(0,1,0), new THREE.Vector3(0,0,0),
   8, 0xffcc00, 1.0, 0.5
 );
 arrowHelper.line.material.blending    = THREE.AdditiveBlending;
@@ -122,7 +142,7 @@ function showLaunchIndicator(start, end){
   const len = start.distanceTo(end);
   arrowHelper.position.copy(start);
   arrowHelper.setDirection(dir);
-  arrowHelper.setLength(len, Math.min(1.2, len*.15), Math.min(0.55, len*.07));
+  arrowHelper.setLength(len, Math.min(1.2,len*.15), Math.min(0.55,len*.07));
   arrowHelper.visible = true;
   arrowHelper.line.material.opacity = 0.85;
   arrowHelper.cone.material.opacity = 0.85;
@@ -146,7 +166,7 @@ function updateArrowIndicator(){
 // パーティクル GPU バッファ
 // ══════════════════════════════════════════════
 
-const MAX = 6000;
+const MAX = 8000;
 const bP = new Float32Array(MAX*3);
 const bC = new Float32Array(MAX*3);
 const bA = new Float32Array(MAX);
@@ -160,7 +180,9 @@ geo.setAttribute('aS',       new THREE.BufferAttribute(bS,1));
 
 const mat = new THREE.ShaderMaterial({
   vertexShader:`
-    attribute vec3 aC; attribute float aA,aS;
+    attribute vec3 aC;
+    attribute float aA;
+    attribute float aS;
     varying vec3 vC; varying float vA;
     void main(){
       vC=aC; vA=aA;
@@ -178,35 +200,39 @@ const mat = new THREE.ShaderMaterial({
       if(a<.01)discard;
       gl_FragColor=vec4(clamp(vC*(1.+core*2.6),0.,1.),a);
     }`,
-  transparent:true,
-  blending:THREE.AdditiveBlending,
-  depthWrite:false,
-  depthTest:false
+  transparent:true, blending:THREE.AdditiveBlending,
+  depthWrite:false, depthTest:false
 });
 geo.setDrawRange(0,0);
 const _pts = new THREE.Points(geo, mat);
-_pts.frustumCulled = false;  // バウンディング球が未計算でもカリングしない
-_pts.renderOrder   = 999;    // 他オブジェクトより後に描画
+_pts.frustumCulled = false;
+_pts.renderOrder   = 999;
 scene.add(_pts);
 
 // ══════════════════════════════════════════════
 // パーティクル状態配列
+// hold > 0 の間はその場に静止し、0になって初めて飛散・フェードを開始
 // ══════════════════════════════════════════════
 
 const ps = [];
-function addP(x,y,z, vx,vy,vz, r,g,b, decay, s){
-  ps.push({x,y,z,vx,vy,vz,r,g,b,a:1.0,decay,s});
+function addP(x,y,z, vx,vy,vz, r,g,b, decay, s, hold=0){
+  ps.push({x,y,z,vx,vy,vz,r,g,b,a:1.0,decay,s,hold});
 }
 
 function updateParticles(){
   let cnt = 0;
   for(let i=ps.length-1; i>=0; i--){
     const p = ps[i];
-    p.x+=p.vx; p.y+=p.vy; p.z+=p.vz;
-    p.vy -= 0.0030;
-    p.vx *= 0.983; p.vy *= 0.983; p.vz *= 0.968;
-    p.a  -= p.decay;
-    if(p.a <= 0){ ps.splice(i,1); continue; }
+    if(p.hold > 0){
+      p.hold--;
+      // 静止中：位置・alpha 変更なし、そのまま描画
+    } else {
+      p.x+=p.vx; p.y+=p.vy; p.z+=p.vz;
+      p.vy -= 0.0028;
+      p.vx *= 0.983; p.vy *= 0.983; p.vz *= 0.968;
+      p.a  -= p.decay;
+      if(p.a <= 0){ ps.splice(i,1); continue; }
+    }
     if(cnt >= MAX) continue;
     bP[cnt*3]=p.x; bP[cnt*3+1]=p.y; bP[cnt*3+2]=p.z;
     bC[cnt*3]=p.r; bC[cnt*3+1]=p.g; bC[cnt*3+2]=p.b;
@@ -222,7 +248,7 @@ function updateParticles(){
 }
 
 // ══════════════════════════════════════════════
-// カラーパレット
+// カラーパレット（画像なし時のフォールバック）
 // ══════════════════════════════════════════════
 
 const PALETTES = [
@@ -235,52 +261,140 @@ const PALETTES = [
 ];
 
 // ══════════════════════════════════════════════
-// 爆発
+// 通常爆発（フォールバック）
 // ══════════════════════════════════════════════
 
 function burst(x, y, z, pal){
   for(let i=0; i<200; i++){
-    const theta = Math.random()*Math.PI*2;
-    const phi   = Math.acos(2*Math.random()-1);
-    const sp    = 0.038 + Math.random()*0.085;
-    const zFwd  = (Math.random() < 0.15) ? 0.055 + Math.random()*0.045 : 0;
-    const c = pal[Math.floor(Math.random()*pal.length)];
+    const theta=Math.random()*Math.PI*2, phi=Math.acos(2*Math.random()-1);
+    const sp=0.038+Math.random()*0.085;
+    const zFwd=(Math.random()<0.15)?0.055+Math.random()*0.045:0;
+    const c=pal[Math.floor(Math.random()*pal.length)];
     addP(x,y,z,
       Math.sin(phi)*Math.cos(theta)*sp,
       Math.sin(phi)*Math.sin(theta)*sp,
-      Math.cos(phi)*sp*0.58 + zFwd,
-      c[0],c[1],c[2],
-      0.004+Math.random()*0.006,
-      0.26+Math.random()*0.32);
-  }
-  for(let i=0; i<30; i++){
-    const c = pal[Math.floor(Math.random()*pal.length)];
-    const a = Math.random()*Math.PI*2;
-    const r = 0.05+Math.random()*0.12;
-    addP(x+Math.cos(a)*r, y+Math.sin(a)*r, z+(Math.random()-.5)*.2,
-      (Math.random()-.5)*.018, 0.015+Math.random()*0.025, (Math.random()-.5)*.015,
-      c[0],c[1],c[2],
-      0.003+Math.random()*0.003,
-      0.45+Math.random()*0.40);
+      Math.cos(phi)*sp*0.58+zFwd,
+      c[0],c[1],c[2], 0.004+Math.random()*0.006, 0.26+Math.random()*0.32);
   }
   for(let i=0; i<14; i++){
     addP(x,y,z,
       (Math.random()-.5)*.025,(Math.random()-.5)*.025,(Math.random()-.5)*.025,
-      1,1,1, 0.065+Math.random()*0.055, 0.55+Math.random()*0.60);
+      1,1,1, 0.065+Math.random()*0.055, 0.55+Math.random()*0.6);
   }
   setTimeout(()=>boom(), 55);
 }
 
 // ══════════════════════════════════════════════
-// ロケット（start/end Vector3 で任意方向に飛ぶ）
+// 画像サンプリング
+// ══════════════════════════════════════════════
+
+function sampleImage(url){
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const SIZE = 64;
+      const cv2 = document.createElement('canvas');
+      cv2.width = cv2.height = SIZE;
+      const ctx = cv2.getContext('2d');
+      // アスペクト比を維持して中央配置
+      const ar = img.width / img.height;
+      let dw = SIZE, dh = SIZE;
+      if(ar > 1) dh = SIZE / ar; else dw = SIZE * ar;
+      ctx.drawImage(img, (SIZE-dw)/2, (SIZE-dh)/2, dw, dh);
+
+      const data = ctx.getImageData(0, 0, SIZE, SIZE).data;
+      const pixels = [];
+      const STEP = 4;
+      for(let py = 0; py < SIZE; py += STEP){
+        for(let px = 0; px < SIZE; px += STEP){
+          const i = (py * SIZE + px) * 4;
+          const r=data[i], g=data[i+1], b=data[i+2], a=data[i+3];
+          if(a < 30) continue;               // 透明
+          if(r>220 && g>220 && b>220) continue; // 白背景
+          if(r<15 && g<15 && b<15) continue;  // 黒すぎ
+          pixels.push({
+            nx: (px / SIZE) * 2 - 1,         // -1..1 (left→right)
+            ny: (py / SIZE) * 2 - 1,         // -1..1 (top→bottom)
+            r: r/255, g: g/255, b: b/255
+          });
+        }
+      }
+      // 最大 280 粒
+      if(pixels.length > 280){
+        pixels.sort(()=>Math.random()-.5);
+        pixels.length = 280;
+      }
+      resolve(pixels);
+    };
+    img.onerror = () => reject(new Error('image load failed'));
+    img.src = url;
+  });
+}
+
+// ══════════════════════════════════════════════
+// 画像花火爆発
+// pixels   : [{nx,ny,r,g,b}]  (正規化 -1..1)
+// center   : THREE.Vector3    (爆発中心)
+// camRight : THREE.Vector3    (カメラ右方向)
+// camUp    : THREE.Vector3    (カメラ上方向)
+// ══════════════════════════════════════════════
+
+const HOLD_FRAMES = 14;   // 約0.23秒 image shape 静止
+const IMG_SCALE   = 1.8;  // ワールド幅 [m]
+
+function burstImageParticles(center, pixels, camRight, camUp){
+  for(const px of pixels){
+    // 画像形状の位置（カメラ正面を向いた平面 + Z方向に薄いランダム厚み）
+    const wx = center.x
+      + camRight.x * px.nx * IMG_SCALE
+      + camUp.x    * (-px.ny) * IMG_SCALE   // 画像Y軸は下向きなので反転
+      + (Math.random()-.5)*.1;
+    const wy = center.y
+      + camRight.y * px.nx * IMG_SCALE
+      + camUp.y    * (-px.ny) * IMG_SCALE
+      + (Math.random()-.5)*.1;
+    const wz = center.z
+      + camRight.z * px.nx * IMG_SCALE
+      + camUp.z    * (-px.ny) * IMG_SCALE
+      + (Math.random()-.5)*.35;
+
+    // 爆発速度（球状ランダム）
+    const theta = Math.random()*Math.PI*2;
+    const phi   = Math.acos(2*Math.random()-1);
+    const sp    = 0.032 + Math.random()*0.072;
+    const zFwd  = (Math.random() < 0.20) ? 0.04 + Math.random()*0.04 : 0;
+
+    addP(wx, wy, wz,
+      Math.sin(phi)*Math.cos(theta)*sp,
+      Math.sin(phi)*Math.sin(theta)*sp,
+      Math.cos(phi)*sp*0.60 + zFwd,
+      px.r, px.g, px.b,
+      0.005 + Math.random()*0.007,   // decay: 1.2〜2.0秒で消える
+      0.27  + Math.random()*0.22,    // aS: ~14px at 10m
+      HOLD_FRAMES);
+  }
+
+  // 中心フラッシュ（静止なし）
+  for(let i=0; i<12; i++){
+    addP(center.x, center.y, center.z,
+      (Math.random()-.5)*.028,(Math.random()-.5)*.028,(Math.random()-.5)*.028,
+      1,1,1, 0.06+Math.random()*0.04, 0.55+Math.random()*0.55);
+  }
+
+  setTimeout(()=>boom(), 55);
+}
+
+// ══════════════════════════════════════════════
+// ロケット
 // ══════════════════════════════════════════════
 
 const rockets = [];
 
-function launchVector(start, end, pal){
-  const dir = end.clone().sub(start).normalize(); // 進行方向（逆噴射用）
-  rockets.push({ start: start.clone(), end: end.clone(), dir,
-                 pos: new THREE.Vector3(), t:0, pal, trail:0 });
+function launchVector(start, end, pal, onBurst=null){
+  const dir = end.clone().sub(start).normalize();
+  rockets.push({ start:start.clone(), end:end.clone(), dir,
+                 pos:new THREE.Vector3(), t:0, pal, trail:0, onBurst });
   showLaunchIndicator(start, end);
   whistle();
 }
@@ -290,72 +404,90 @@ function updateRockets(){
     const r = rockets[i];
     r.t = Math.min(1, r.t+0.017);
     const e = r.t<.5 ? 2*r.t*r.t : 1-(-2*r.t+2)**2/2;
-    r.pos.lerpVectors(r.start, r.end, e); // 3D 補間
+    r.pos.lerpVectors(r.start, r.end, e);
 
     r.trail++;
     if(r.trail % 2 === 0){
-      const tv = 0.016 + Math.random()*0.012; // 後方噴射速度
+      const tv = 0.016 + Math.random()*0.012;
       for(let k=0; k<3; k++){
         addP(
           r.pos.x+(Math.random()-.5)*.06,
           r.pos.y+(Math.random()-.5)*.06,
           r.pos.z+(Math.random()-.5)*.06,
-          -r.dir.x*tv + (Math.random()-.5)*.008,
-          -r.dir.y*tv + (Math.random()-.5)*.008,
-          -r.dir.z*tv + (Math.random()-.5)*.008,
+          -r.dir.x*tv+(Math.random()-.5)*.008,
+          -r.dir.y*tv+(Math.random()-.5)*.008,
+          -r.dir.z*tv+(Math.random()-.5)*.008,
           1, 0.82+Math.random()*.18, 0.3+Math.random()*.3,
-          0.048+Math.random()*0.05,
-          0.18+Math.random()*0.14);
+          0.048+Math.random()*0.05, 0.18+Math.random()*0.14);
       }
       addP(r.pos.x, r.pos.y, r.pos.z, 0,0,0, 1,1,1, 0.55, 0.42);
     }
 
     if(r.t >= 1){
-      burst(r.pos.x, r.pos.y, r.pos.z, r.pal);
+      if(r.onBurst) r.onBurst(r.pos.clone());
+      else burst(r.pos.x, r.pos.y, r.pos.z,
+                 r.pal || PALETTES[Math.floor(Math.random()*PALETTES.length)]);
       rockets.splice(i,1);
     }
   }
 }
 
 // ══════════════════════════════════════════════
-// タップ → カメラ前方の花火配置
+// 画像花火打ち上げ（メインエントリ）
 // ══════════════════════════════════════════════
 
-function launchInFrontOfCamera(screenX, screenY){
-  // カメラの姿勢ベクトルを取得
+function getCameraVectors(){
   const forward = new THREE.Vector3();
-  cam.getWorldDirection(forward); // 正規化済み
-
+  cam.getWorldDirection(forward);
   const right = new THREE.Vector3();
   right.crossVectors(forward, cam.up).normalize();
-
   const up = new THREE.Vector3();
   up.crossVectors(right, forward).normalize();
+  return {forward, right, up};
+}
 
+async function launchImageFirework(screenX, screenY){
+  const {forward, right, up} = getCameraVectors();
   const ndcX = (screenX / innerWidth)  * 2 - 1;
   const ndcY = -(screenY / innerHeight) * 2 + 1;
 
-  // 発射台：カメラ前方6m + 画面横オフセット + 少し下
-  const base = cam.position.clone()
+  const start = cam.position.clone()
     .add(forward.clone().multiplyScalar(6))
-    .add(right.clone().multiplyScalar(ndcX * 2.0));
-  const start = base.clone()
+    .add(right.clone().multiplyScalar(ndcX * 2.0))
     .add(up.clone().multiplyScalar(-3.0));
 
-  // 爆発点：カメラ前方10m + 横オフセット + 上
   const end = cam.position.clone()
     .add(forward.clone().multiplyScalar(10))
     .add(right.clone().multiplyScalar(ndcX * 2.5))
     .add(up.clone().multiplyScalar(3.0 + ndcY * 1.0));
 
-  const pal = PALETTES[Math.floor(Math.random()*PALETTES.length)];
-  launchVector(start, end, pal);
+  // ロケット即時発射 → 画像サンプリングは並列で行う
+  const camRight = right.clone();
+  const camUp    = up.clone();
+  let pixels = null;
+
+  if(works.length > 0){
+    const work = works[Math.floor(Math.random()*works.length)];
+    sampleImage(work.url)
+      .then(px => { pixels = px; })
+      .catch(() => {});
+  }
+
+  launchVector(start, end, null, (burstPos) => {
+    if(pixels && pixels.length > 0){
+      burstImageParticles(burstPos, pixels, camRight, camUp);
+    } else {
+      // 画像未取得ならパレット爆発にフォールバック
+      burst(burstPos.x, burstPos.y, burstPos.z,
+            PALETTES[Math.floor(Math.random()*PALETTES.length)]);
+    }
+  });
 }
 
 function onTap(e){
   try{ if(audioCtx) audioCtx.resume(); }catch(_){}
   const touch = e.changedTouches ? e.changedTouches[0] : e;
-  launchInFrontOfCamera(touch.clientX, touch.clientY);
+  launchImageFirework(touch.clientX, touch.clientY);
 }
 
 document.addEventListener('touchstart', onTap, {passive:true});
@@ -376,15 +508,15 @@ const R = THREE.MathUtils.degToRad;
 function updateCamera(){
   if(xrActive) return;
   if(!gyroOn){
-    cam.rotation.order = 'YXZ';
-    cam.rotation.set(-0.28, 0, 0);
+    cam.rotation.order='YXZ';
+    cam.rotation.set(-0.28,0,0);
     return;
   }
-  const heading = R(360 - gA);
-  euG.set(R(gB), R(gA), R(-gG), 'YXZ');
+  const heading = R(360-gA);
+  euG.set(R(gB),R(gA),R(-gG),'YXZ');
   cam.quaternion.setFromEuler(euG);
   cam.quaternion.multiply(q1G);
-  q2G.setFromAxisAngle(zeeG, -heading);
+  q2G.setFromAxisAngle(zeeG,-heading);
   cam.quaternion.multiply(q2G);
 }
 
@@ -397,21 +529,19 @@ function startGyro(){
 }
 
 function checkPerm(){
-  if(typeof DeviceOrientationEvent === 'undefined') return;
-  if(typeof DeviceOrientationEvent.requestPermission === 'function'){
-    document.getElementById('perm').style.display = 'flex';
-  } else {
-    startGyro();
-  }
+  if(typeof DeviceOrientationEvent==='undefined') return;
+  if(typeof DeviceOrientationEvent.requestPermission==='function'){
+    document.getElementById('perm').style.display='flex';
+  } else { startGyro(); }
 }
 
 function grantPerm(){
   DeviceOrientationEvent.requestPermission()
     .then(s=>{
-      document.getElementById('perm').style.display = 'none';
+      document.getElementById('perm').style.display='none';
       if(s==='granted') startGyro();
     })
-    .catch(()=>{ document.getElementById('perm').style.display = 'none'; });
+    .catch(()=>{ document.getElementById('perm').style.display='none'; });
 }
 
 // ══════════════════════════════════════════════
@@ -423,7 +553,7 @@ let xrActive = false;
   if(!navigator.xr) return;
   try{
     const ok = await navigator.xr.isSessionSupported('immersive-ar');
-    if(ok) document.getElementById('xrbtn').style.display = 'block';
+    if(ok) document.getElementById('xrbtn').style.display='block';
   }catch(_){}
 })();
 
@@ -434,14 +564,14 @@ async function enterXR(){
       optionalFeatures:['dom-overlay'],
       domOverlay:{root:document.getElementById('ui')}
     });
-    ren.xr.enabled = true; xrActive = true;
+    ren.xr.enabled=true; xrActive=true;
     await ren.xr.setSession(s);
     ren.setAnimationLoop(()=>{ tick(); ren.render(scene,cam); });
     s.addEventListener('end',()=>{
-      ren.xr.enabled = false; xrActive = false;
+      ren.xr.enabled=false; xrActive=false;
       ren.setAnimationLoop(null);
     });
-  }catch(e){ console.warn('WebXR:', e); }
+  }catch(e){ console.warn('WebXR:',e); }
 }
 
 // ══════════════════════════════════════════════
@@ -450,7 +580,7 @@ async function enterXR(){
 
 let audioCtx = null;
 function getAu(){
-  if(!audioCtx) audioCtx = new(window.AudioContext||window.webkitAudioContext)();
+  if(!audioCtx) audioCtx=new(window.AudioContext||window.webkitAudioContext)();
   audioCtx.resume(); return audioCtx;
 }
 function whistle(){
@@ -458,10 +588,10 @@ function whistle(){
     const ctx=getAu(), o=ctx.createOscillator(), g=ctx.createGain();
     o.connect(g); g.connect(ctx.destination);
     o.type='sine';
-    o.frequency.setValueAtTime(200, ctx.currentTime);
-    o.frequency.exponentialRampToValueAtTime(2400, ctx.currentTime+1.15);
-    g.gain.setValueAtTime(.038, ctx.currentTime);
-    g.gain.linearRampToValueAtTime(0, ctx.currentTime+1.15);
+    o.frequency.setValueAtTime(200,ctx.currentTime);
+    o.frequency.exponentialRampToValueAtTime(2400,ctx.currentTime+1.15);
+    g.gain.setValueAtTime(.038,ctx.currentTime);
+    g.gain.linearRampToValueAtTime(0,ctx.currentTime+1.15);
     o.start(); o.stop(ctx.currentTime+1.15);
   }catch(_){}
 }
@@ -473,10 +603,10 @@ function boom(vol=0.30){
     for(let i=0;i<n;i++) d[i]=(Math.random()*2-1)*Math.exp(-i/(n*.10));
     const src=ctx.createBufferSource(); src.buffer=buf;
     const g=ctx.createGain();
-    g.gain.setValueAtTime(vol, ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(.001, ctx.currentTime+.82);
+    g.gain.setValueAtTime(vol,ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+.82);
     src.connect(g); g.connect(ctx.destination); src.start();
-    if(vol > .10) setTimeout(()=>boom(vol*.28), 290);
+    if(vol>.10) setTimeout(()=>boom(vol*.28),290);
   }catch(_){}
 }
 
@@ -498,14 +628,10 @@ function animate(){
 }
 animate();
 
-// ══════════════════════════════════════════════
-// リサイズ
-// ══════════════════════════════════════════════
-
 window.addEventListener('resize',()=>{
-  cam.aspect = innerWidth/innerHeight;
+  cam.aspect=innerWidth/innerHeight;
   cam.updateProjectionMatrix();
-  ren.setSize(innerWidth, innerHeight);
+  ren.setSize(innerWidth,innerHeight);
 });
 
 checkPerm();
