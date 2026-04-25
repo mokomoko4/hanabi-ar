@@ -117,9 +117,11 @@ scene.add(arrowHelper);
 let arrowFrames = 0;
 const launchDirEl = document.getElementById('launchDir');
 
-function showLaunchIndicator(x, y0, z, y1){
-  const len = Math.max(1.5, y1 - y0);
-  arrowHelper.position.set(x, y0, z);
+function showLaunchIndicator(start, end){
+  const dir = end.clone().sub(start).normalize();
+  const len = start.distanceTo(end);
+  arrowHelper.position.copy(start);
+  arrowHelper.setDirection(dir);
   arrowHelper.setLength(len, Math.min(1.2, len*.15), Math.min(0.55, len*.07));
   arrowHelper.visible = true;
   arrowHelper.line.material.opacity = 0.85;
@@ -264,15 +266,16 @@ function burst(x, y, z, pal){
 }
 
 // ══════════════════════════════════════════════
-// ロケット
+// ロケット（start/end Vector3 で任意方向に飛ぶ）
 // ══════════════════════════════════════════════
 
 const rockets = [];
 
-function launch(wx, wy1, wz, pal){
-  const y0 = -5.5;
-  rockets.push({ x:wx, z:wz, y0, y1:wy1, t:0, pal, trail:0 });
-  showLaunchIndicator(wx, y0, wz, wy1);
+function launchVector(start, end, pal){
+  const dir = end.clone().sub(start).normalize(); // 進行方向（逆噴射用）
+  rockets.push({ start: start.clone(), end: end.clone(), dir,
+                 pos: new THREE.Vector3(), t:0, pal, trail:0 });
+  showLaunchIndicator(start, end);
   whistle();
 }
 
@@ -281,53 +284,72 @@ function updateRockets(){
     const r = rockets[i];
     r.t = Math.min(1, r.t+0.017);
     const e = r.t<.5 ? 2*r.t*r.t : 1-(-2*r.t+2)**2/2;
-    const ry = r.y0 + (r.y1-r.y0)*e;
+    r.pos.lerpVectors(r.start, r.end, e); // 3D 補間
 
     r.trail++;
     if(r.trail % 2 === 0){
+      const tv = 0.016 + Math.random()*0.012; // 後方噴射速度
       for(let k=0; k<3; k++){
         addP(
-          r.x+(Math.random()-.5)*.06,
-          ry+(Math.random()-.5)*.06,
-          r.z+(Math.random()-.5)*.06,
-          (Math.random()-.5)*.008,
-          -0.014-Math.random()*.012,
-          (Math.random()-.5)*.008,
+          r.pos.x+(Math.random()-.5)*.06,
+          r.pos.y+(Math.random()-.5)*.06,
+          r.pos.z+(Math.random()-.5)*.06,
+          -r.dir.x*tv + (Math.random()-.5)*.008,
+          -r.dir.y*tv + (Math.random()-.5)*.008,
+          -r.dir.z*tv + (Math.random()-.5)*.008,
           1, 0.82+Math.random()*.18, 0.3+Math.random()*.3,
           0.048+Math.random()*0.05,
           0.18+Math.random()*0.14);
       }
-      addP(r.x, ry, r.z, 0,0,0, 1,1,1, 0.55, 0.42);
+      addP(r.pos.x, r.pos.y, r.pos.z, 0,0,0, 1,1,1, 0.55, 0.42);
     }
 
     if(r.t >= 1){
-      burst(r.x, r.y1, r.z, r.pal);
+      burst(r.pos.x, r.pos.y, r.pos.z, r.pal);
       rockets.splice(i,1);
     }
   }
 }
 
 // ══════════════════════════════════════════════
-// タップ → ワールド座標
+// タップ → カメラ前方の花火配置
 // ══════════════════════════════════════════════
 
-function tapToWorld(sx, sy, wz){
-  const ndcX = (sx/innerWidth)*2-1;
-  const ndcY = -(sy/innerHeight)*2+1;
-  const v = new THREE.Vector3(ndcX, ndcY, 0.5).unproject(cam);
-  v.sub(cam.position).normalize();
-  const t = Math.abs(v.z) > 1e-4 ? (wz-cam.position.z)/v.z : 10;
-  return { x: cam.position.x + v.x*t, y: cam.position.y + v.y*t };
+function launchInFrontOfCamera(screenX, screenY){
+  // カメラの姿勢ベクトルを取得
+  const forward = new THREE.Vector3();
+  cam.getWorldDirection(forward); // 正規化済み
+
+  const right = new THREE.Vector3();
+  right.crossVectors(forward, cam.up).normalize();
+
+  const up = new THREE.Vector3();
+  up.crossVectors(right, forward).normalize();
+
+  const ndcX = (screenX / innerWidth)  * 2 - 1;
+  const ndcY = -(screenY / innerHeight) * 2 + 1;
+
+  // 発射台：カメラ前方6m + 画面横オフセット + 少し下
+  const base = cam.position.clone()
+    .add(forward.clone().multiplyScalar(6))
+    .add(right.clone().multiplyScalar(ndcX * 2.0));
+  const start = base.clone()
+    .add(up.clone().multiplyScalar(-3.0));
+
+  // 爆発点：カメラ前方10m + 横オフセット + 上
+  const end = cam.position.clone()
+    .add(forward.clone().multiplyScalar(10))
+    .add(right.clone().multiplyScalar(ndcX * 2.5))
+    .add(up.clone().multiplyScalar(3.0 + ndcY * 1.0));
+
+  const pal = PALETTES[Math.floor(Math.random()*PALETTES.length)];
+  launchVector(start, end, pal);
 }
 
 function onTap(e){
   try{ if(audioCtx) audioCtx.resume(); }catch(_){}
   const touch = e.changedTouches ? e.changedTouches[0] : e;
-  const wz  = -11 - Math.random()*3;
-  const wp  = tapToWorld(touch.clientX, touch.clientY, wz);
-  const wy1 = Math.max(1.5, Math.min(8.0, wp.y));
-  const pal = PALETTES[Math.floor(Math.random()*PALETTES.length)];
-  launch(wp.x + (Math.random()-.5)*.6, wy1, wz, pal);
+  launchInFrontOfCamera(touch.clientX, touch.clientY);
 }
 
 cv.addEventListener('touchstart', onTap, {passive:true});
