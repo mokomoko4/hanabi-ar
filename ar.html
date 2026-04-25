@@ -80,13 +80,6 @@ const scene = new THREE.Scene();
 const cam = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.05, 500);
 cam.position.set(0, 0, 0);
 
-// ── デバッグ用テスト球（赤）──
-const _dbgMesh = new THREE.Mesh(
-  new THREE.SphereGeometry(0.3, 16, 16),
-  new THREE.MeshBasicMaterial({color: 0xff0000})
-);
-_dbgMesh.position.set(0, 0, -5);
-scene.add(_dbgMesh);
 
 // ══════════════════════════════════════════════
 // カメラ映像
@@ -172,7 +165,7 @@ const mat = new THREE.ShaderMaterial({
     void main(){
       vC=aC; vA=aA;
       vec4 mv=modelViewMatrix*vec4(position,1.);
-      gl_PointSize=18.0;
+      gl_PointSize=aS*(520.0/-mv.z);
       gl_Position=projectionMatrix*mv;
     }`,
   fragmentShader:`
