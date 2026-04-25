@@ -3,984 +3,449 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>はなびAR</title>
+<title>花火AR</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://unpkg.com/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 <style>
-*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
-:root{
-  --bg:#06001a;--border:rgba(255,255,255,0.16);--text:#fff;
-  --muted:rgba(255,255,255,0.6);--gold:#ffcc44;
-}
-html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif;color:var(--text);}
-body{background:radial-gradient(ellipse at 50% 40%,#180032 0%,#050014 75%);}
-.hidden{display:none!important;}
-#worldStage,#cameraStage,#viewerModal{position:fixed;inset:0;}
-#worldStage{background:radial-gradient(ellipse at 50% 40%,#180032 0%,#050014 75%);}
-#worldCanvas,#cameraCanvas,#viewerCanvas{position:absolute;inset:0;width:100%;height:100%;}
-#cameraVideo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;}
-#fxCanvas{position:fixed;inset:0;width:100%;height:100%;z-index:15;pointer-events:none;}
-.ui{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;pointer-events:none;}
-.header{padding:14px 16px 10px;background:linear-gradient(180deg,rgba(0,0,0,0.82) 0%,transparent 100%);display:flex;align-items:center;gap:10px;pointer-events:auto;}
-.back{width:36px;height:36px;border-radius:50%;border:1px solid var(--border);background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;font-size:18px;color:#fff;text-decoration:none;}
-.header-copy{min-width:0;}
-.title{font-size:14px;font-weight:700;color:var(--gold);}
-.sub{font-size:10px;color:var(--muted);margin-top:2px;}
-.badge{margin-left:auto;padding:4px 12px;border-radius:20px;background:rgba(255,200,60,0.15);border:1px solid rgba(255,200,60,0.3);font-size:11px;color:var(--gold);}
-.ver{font-size:9px;color:rgba(255,255,255,0.25);margin-left:4px;}
-.center-status{margin:auto auto 0;padding:8px 18px;border-radius:20px;background:rgba(0,0,0,0.6);border:1px solid var(--border);font-size:12px;color:rgba(255,255,255,0.86);text-align:center;pointer-events:none;transition:.25s;}
-.center-status.good{border-color:rgba(100,255,150,0.5);color:#88ffaa;background:rgba(0,40,20,0.7);}
-.bottom{padding:12px 16px 26px;background:linear-gradient(0deg,rgba(0,0,0,0.82) 0%,transparent 100%);display:flex;gap:8px;pointer-events:auto;}
-.btn{flex:1;padding:11px 8px;border-radius:14px;border:1px solid var(--border);background:rgba(0,0,0,0.5);color:#fff;font-size:11px;text-align:center;cursor:pointer;}
-.btn .bi{font-size:20px;display:block;margin-bottom:3px;}
-.btn.active{background:rgba(255,140,0,0.22);border-color:rgba(255,180,0,0.45);color:var(--gold);}
-.btn.strong{background:rgba(255,140,0,0.22);border-color:rgba(255,180,0,0.45);color:var(--gold);}
-.hint{position:fixed;left:0;right:0;bottom:96px;text-align:center;font-size:11px;color:var(--muted);pointer-events:none;z-index:18;animation:fadeout 5s ease forwards;animation-delay:4s;}
-@keyframes fadeout{to{opacity:0;}}
-
-#viewerModal{z-index:40;background:rgba(3,0,12,0.94);display:none;}
-#viewerWrap{position:absolute;inset:70px 0 110px;display:flex;align-items:center;justify-content:center;}
-#viewerName{position:absolute;top:14px;left:0;right:0;text-align:center;font-size:18px;font-weight:700;color:var(--gold);}
-#viewerImage{max-width:90%;max-height:82%;object-fit:contain;border-radius:18px;border:2px solid rgba(255,255,255,0.15);display:none;}
-#viewerLoading{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:var(--muted);font-size:13px;}
-.spinner{width:42px;height:42px;border-radius:50%;border:3px solid rgba(255,200,60,0.2);border-top-color:var(--gold);animation:spin 1s linear infinite;}
-@keyframes spin{to{transform:rotate(360deg);}}
-.viewer-bottom{position:absolute;left:16px;right:16px;bottom:24px;display:flex;gap:8px;}
-#loadingScreen,#gyroPrompt{position:fixed;inset:0;z-index:60;background:#06001a;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:32px;text-align:center;}
-#gyroPrompt{display:none;background:rgba(0,0,0,0.9);z-index:61;}
-.loading-emoji{font-size:48px;animation:float 2s ease-in-out infinite;}
-@keyframes float{0%,100%{transform:translateY(0);}50%{transform:translateY(-8px);}}
-.loading-text{font-size:14px;color:rgba(255,255,255,0.72);line-height:1.8;}
-.loading-bar-wrap{width:200px;height:4px;background:rgba(255,255,255,0.1);border-radius:2px;overflow:hidden;}
-.loading-bar{height:100%;width:0%;background:linear-gradient(90deg,#ff6b00,#ffcc00);transition:width .25s;}
-.prompt-btn{padding:14px 34px;border:none;border-radius:16px;background:linear-gradient(135deg,#ff6b00,#ffcc00);color:#000;font-size:15px;font-weight:900;cursor:pointer;}
-
-/* 作品オーバーレイ */
-.ar-work-overlay{
-  position:fixed;object-fit:contain;border-radius:12px;
-  border:2px solid rgba(255,255,255,0.3);
-  pointer-events:auto;z-index:6;cursor:pointer;
-  opacity:0;transform:scale(0);transform-origin:center;
-  transition:opacity 0.5s ease, transform 0.5s cubic-bezier(0.34,1.56,0.64,1);
-}
-.ar-work-overlay.visible{opacity:1;transform:scale(1);}
-/* 花火化：白く閃光して消える */
-@keyframes work-explode{
-  0%  {opacity:1;filter:brightness(1);}
-  40% {opacity:1;filter:brightness(5) saturate(0);}
-  100%{opacity:0;filter:brightness(0);}
-}
-.ar-work-overlay.exploding{
-  animation:work-explode 0.28s ease forwards !important;
-  pointer-events:none !important;
-}
-/* 再出現 */
-@keyframes pop-in{
-  0%  {opacity:0;transform:scale(0);}
-  70% {opacity:1;transform:scale(1.15);}
-  100%{opacity:1;transform:scale(1);}
-}
-.ar-work-overlay.popping{animation:pop-in 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards;}
-.ar-work-name{
-  position:fixed;text-align:center;font-size:11px;color:#fff;
-  background:rgba(0,0,0,0.62);border-radius:10px;padding:2px 6px;
-  pointer-events:none;z-index:6;opacity:0;transition:opacity 0.5s;
-}
-.ar-work-name.visible{opacity:1;}
-@media(max-width:420px){.btn{font-size:10px}.badge{padding:4px 10px}}
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{width:100%;height:100%;overflow:hidden;background:#000;touch-action:none;}
+#vid{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;}
+#cv{position:fixed;inset:0;width:100%;height:100%;z-index:1;touch-action:none;}
+#ui{position:fixed;bottom:0;left:0;right:0;padding-bottom:46px;z-index:2;
+    pointer-events:none;display:flex;justify-content:center;}
+.hint{font:13px/1 'Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif;
+      color:rgba(255,255,255,.7);letter-spacing:.07em;
+      text-shadow:0 2px 14px rgba(0,0,0,.95);
+      animation:hp 3s ease-in-out infinite;}
+@keyframes hp{0%,100%{opacity:.4}55%{opacity:.95}}
+#xrbtn{position:fixed;top:18px;right:16px;z-index:3;pointer-events:auto;
+       padding:8px 18px;border:1px solid rgba(255,255,255,.3);
+       background:rgba(0,0,0,.45);border-radius:20px;color:#fff;
+       font-size:12px;cursor:pointer;display:none;
+       font-family:'Hiragino Kaku Gothic ProN',sans-serif;}
+#perm{position:fixed;inset:0;z-index:10;background:rgba(0,0,0,.88);display:none;
+      flex-direction:column;align-items:center;justify-content:center;
+      gap:22px;padding:40px;text-align:center;color:#fff;
+      font:13px/1.9 'Hiragino Kaku Gothic ProN',sans-serif;}
+.pbtn{padding:13px 36px;border:none;border-radius:14px;
+      background:linear-gradient(135deg,#ff6b00,#ffcc00);
+      color:#000;font-size:15px;font-weight:900;cursor:pointer;}
 </style>
 </head>
 <body>
 
-<div id="worldStage"><canvas id="worldCanvas"></canvas></div>
-<div id="cameraStage" class="hidden">
-  <video id="cameraVideo" autoplay playsinline muted></video>
-  <canvas id="cameraCanvas"></canvas>
-</div>
-<canvas id="fxCanvas"></canvas>
-
-<div class="ui">
-  <div class="header">
-    <a class="back" href="index.html">←</a>
-    <div class="header-copy">
-      <div class="title" id="headerTitle">みんなのAR空間</div>
-      <div class="sub" id="headerSub">スマホを動かして見渡してね</div>
-    </div>
-    <div class="badge" id="workCount">0 作品</div>
-    <div class="ver">v6.3</div>
+<video id="vid" autoplay playsinline muted></video>
+<canvas id="cv"></canvas>
+<div id="ui"><span class="hint">タップで花火打ち上げ 🎆</span></div>
+<button id="xrbtn" onclick="enterXR()">AR モード ✦</button>
+<div id="perm">
+  <div style="font-size:14px;line-height:2;opacity:.85">
+    スマホを空に向けると<br>花火が空に見えます<br>
+    <small style="opacity:.6;font-size:11px">センサー使用を許可してください</small>
   </div>
-  <div class="center-status good" id="statusText">✨ タップして作品を出そう！</div>
-  <div class="hint" id="hintText">📱 作品タップで輪郭花火に変身！</div>
-  <div class="bottom">
-    <div class="btn active" id="btnCamera"><span class="bi">📷</span>カメラAR</div>
-    <div class="btn strong" onclick="openViewer()"><span class="bi">🖼️</span>作品を見る</div>
-  </div>
-</div>
-
-<div id="viewerModal">
-  <div class="header">
-    <button class="back" onclick="closeViewer()" style="cursor:pointer">←</button>
-    <div class="header-copy">
-      <div class="title">さくひんを見る</div>
-      <div class="sub">ドラッグでぐるぐる回せるよ！</div>
-    </div>
-  </div>
-  <div id="viewerWrap">
-    <div id="viewerName"></div>
-    <div id="viewerLoading"><div class="spinner"></div><div>よみこみ中…</div></div>
-    <img id="viewerImage" alt="作品画像">
-    <canvas id="viewerCanvas"></canvas>
-  </div>
-  <div class="viewer-bottom">
-    <div class="btn" onclick="closeViewer()"><span class="bi">←</span>もどる</div>
-    <div class="btn strong" onclick="setMode('camera');closeViewer();"><span class="bi">📷</span>カメラAR</div>
-  </div>
-</div>
-
-<div id="loadingScreen">
-  <div class="loading-emoji">🎆</div>
-  <div class="loading-text">空間と作品を準備中…</div>
-  <div class="loading-bar-wrap"><div class="loading-bar" id="loadingBar"></div></div>
-</div>
-<div id="gyroPrompt">
-  <div class="loading-emoji">🌍</div>
-  <div class="loading-text">スマホを動かして空間を見渡すために<br>センサーの許可が必要です</div>
-  <button class="prompt-btn" onclick="requestGyroPermission()">許可して入る ▶</button>
+  <button class="pbtn" onclick="grantPerm()">許可して始める ▶</button>
 </div>
 
 <script>
-const firebaseConfig={
-  apiKey:"AIzaSyDGlQeMC6iJzWAB16teP_5oC2FeBcgZxmA",
-  authDomain:"hanabi-ar-1754a.firebaseapp.com",
-  databaseURL:"https://hanabi-ar-1754a-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId:"hanabi-ar-1754a",
-  storageBucket:"hanabi-ar-1754a.firebasestorage.app",
-  messagingSenderId:"861479696200",
-  appId:"1:861479696200:web:393add8997cf25affd657d"
-};
-firebase.initializeApp(firebaseConfig);
-const db=firebase.database();
-
-const state={
-  mode:'camera',works:[],currentWork:null,
-  useGyro:false,yaw:0,pitch:0,
-  worldObjects:[],loadingSteps:0,loadingGoal:2,
-  worksVisible:false,
-};
-const els={
-  worldStage:   document.getElementById('worldStage'),
-  cameraStage:  document.getElementById('cameraStage'),
-  viewerModal:  document.getElementById('viewerModal'),
-  workCount:    document.getElementById('workCount'),
-  loadingBar:   document.getElementById('loadingBar'),
-  loadingScreen:document.getElementById('loadingScreen'),
-  statusText:   document.getElementById('statusText'),
-  hintText:     document.getElementById('hintText'),
-  headerTitle:  document.getElementById('headerTitle'),
-  headerSub:    document.getElementById('headerSub'),
-
-  btnCamera:    document.getElementById('btnCamera'),
-  gyroPrompt:   document.getElementById('gyroPrompt'),
-  cameraVideo:  document.getElementById('cameraVideo'),
-  viewerName:   document.getElementById('viewerName'),
-  viewerLoading:document.getElementById('viewerLoading'),
-  viewerImage:  document.getElementById('viewerImage'),
-};
-function advanceLoading(s=1){
-  state.loadingSteps=Math.min(state.loadingGoal,state.loadingSteps+s);
-  els.loadingBar.style.width=(state.loadingSteps/state.loadingGoal*100)+'%';
-  if(state.loadingSteps>=state.loadingGoal)setTimeout(()=>els.loadingScreen.style.display='none',350);
-}
-function setStatus(t,g=false){els.statusText.textContent=t;els.statusText.classList.toggle('good',!!g);}
-function updateHeader(){
-  els.headerTitle.textContent='みんなのARはなび';
-  els.headerSub.textContent='カメラを動かして見渡してね';
-  els.hintText.textContent='📱 作品タップでマイクラブロック花火！空白タップで全部出す/消す';
-  els.btnCamera.classList.add('active');
-}
-function setMode(mode){
-  state.mode=mode;state.worksVisible=false;
-  document.querySelectorAll('.ar-work-overlay').forEach(el=>el.classList.remove('visible','exploding','popping'));
-  document.querySelectorAll('.ar-work-name').forEach(el=>el.classList.remove('visible'));
-  state.worldObjects.forEach(({mesh})=>{mesh.visible=false;});
-  cameraWorks.forEach(({mesh})=>{mesh.visible=false;});
-  els.worldStage.classList.toggle('hidden',mode!=='world');
-  els.cameraStage.classList.toggle('hidden',mode!=='camera');
-  updateHeader();
-  if(mode==='camera'){startCamera();setStatus('📷 タップして作品を出そう！',true);}
-  else setStatus('✨ タップして作品を出そう！',true);
-}
-
-function selectWork(id){
-  const w=state.works.find(x=>x.id===id)||state.works[0]||null;
-  if(!w)return;state.currentWork=w;
-  if(els.viewerModal.style.display==='block')loadViewerWork(w);
-}
-
 // ══════════════════════════════════════════════
-// 💎 3D キューブ花火エンジン v4
+// Three.js セットアップ
 // ══════════════════════════════════════════════
 
-// ① 画像から主要色をサンプリング（白・透明・薄色を除外）
-function sampleVoxelColors(imgSource, maxCount) {
-  const S = 22;
-  const cv = document.createElement('canvas');
-  cv.width = S; cv.height = S;
-  const ctx = cv.getContext('2d');
-  ctx.drawImage(imgSource, 0, 0, S, S);
-  const d = ctx.getImageData(0, 0, S, S).data;
-  const candidates = [];
-  for(let y = 0; y < S; y++){
-    for(let x = 0; x < S; x++){
-      const i = (y*S+x)*4;
-      if(d[i+3] < 30) continue;
-      const r=d[i], g=d[i+1], b=d[i+2];
-      if(r > 228 && g > 228 && b > 228) continue; // 白を除外
-      const mx=Math.max(r,g,b)/255, mn=Math.min(r,g,b)/255;
-      const l=(mx+mn)*0.5;
-      const sat=mx===mn?0:(l>0.5?(mx-mn)/(2-mx-mn):(mx-mn)/(mx+mn));
-      if(sat < 0.10 && l > 0.70) continue; // 薄いグレーを除外
-      candidates.push({ r, g, b, gx:x, gy:y });
-    }
-  }
-  if(candidates.length === 0) return candidates;
-  if(candidates.length <= maxCount) return candidates;
-  const step = candidates.length / maxCount;
-  return Array.from({length:maxCount}, (_,k) => candidates[Math.floor(k*step)]);
-}
+const cv = document.getElementById('cv');
+const ren = new THREE.WebGLRenderer({canvas:cv, alpha:true, antialias:true});
+ren.setPixelRatio(Math.min(devicePixelRatio, 2.5));
+ren.setSize(innerWidth, innerHeight);
+ren.setClearColor(0, 0);
 
-// ② ロケット → キューブが画像の形に集結 → 球状爆散
-function launchVoxelFirework(imgSource, cx, cy) {
-  let colors;
-  try { colors = sampleVoxelColors(imgSource, 180); } catch(e) { colors = []; }
-  if(colors.length === 0) { spawnBurst(cx, cy, true); return; }
+const scene = new THREE.Scene();
+const cam = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.05, 500);
+cam.position.set(0, 0, 0);
 
-  const launchY = window.innerHeight + 10;
-  particles2D.push({
-    type:'rocket', phase:'travel',
-    x:cx, y:launchY, startX:cx, startY:launchY, targetX:cx, targetY:cy,
-    travelFrames:32, travelLeft:32,
-    size:6, color:'#ffffff', life:1.0, decay:0
-  });
-  setTimeout(()=>{
-    [-60, 60].forEach(dx=>{
-      particles2D.push({
-        type:'rocket', phase:'travel',
-        x:cx+dx, y:launchY, startX:cx+dx, startY:launchY,
-        targetX:cx+dx*0.18, targetY:cy+18,
-        travelFrames:28, travelLeft:28,
-        size:4, color:'#ffcc44', life:1.0, decay:0
-      });
-    });
-  }, 170);
+// ══════════════════════════════════════════════
+// パーティクル GPU バッファ
+// ══════════════════════════════════════════════
 
-  setTimeout(()=>{
-    const S=22, SCALE=1.9, DW=120*SCALE, DH=120*SCALE;
-    const center=screenTo3D(cx,cy,0);
-    colors.forEach(p=>{
-      const TRAVEL_F=16+Math.floor(Math.random()*7);
-      const px=(cx-DW/2)+(p.gx+0.5)/S*DW;
-      const py=(cy-DH/2)+(p.gy+0.5)/S*DH;
-      const pz=(Math.random()-0.5)*0.35;
-      const target=screenTo3D(px,py,pz);
-      // 爆発速度：完全3D球状放射
-      const theta=Math.random()*Math.PI*2;
-      const phi=Math.acos(2*Math.random()-1);
-      const spd=0.030+Math.random()*0.058;
-      cubicles.push({
-        x:center.x, y:center.y, z:center.z,
-        sx:center.x, sy:center.y, sz:center.z,
-        tx:target.x, ty:target.y, tz:target.z,
-        tf:TRAVEL_F, tl:TRAVEL_F,
-        holdFrames:14+Math.floor(Math.random()*8),
-        phase:'travel',
-        vx:Math.sin(phi)*Math.cos(theta)*spd,
-        vy:Math.sin(phi)*Math.sin(theta)*spd,
-        vz:Math.cos(phi)*spd*0.55,
-        r:p.r, g:p.g, b:p.b,
-        life:1.0, decay:0.007+Math.random()*0.006,
-        rotX:Math.random()*Math.PI*2,
-        rotY:Math.random()*Math.PI*2,
-        rotZ:Math.random()*Math.PI*2,
-        angVX:0, angVY:0, angVZ:0,
-        size:0.062+Math.random()*0.032
-      });
-    });
-    playGrandBoom();
-  }, 530);
-}
+const MAX = 6000;
+const bP = new Float32Array(MAX*3); // position
+const bC = new Float32Array(MAX*3); // color
+const bA = new Float32Array(MAX);   // alpha
+const bS = new Float32Array(MAX);   // size
 
-// ③ カメラオーバーレイ作品の花火化
-function explodeWorkToFirework(imgEl, nameEl, work, cx, cy) {
-  if(imgEl.dataset.exploding==='1') return;
-  imgEl.dataset.exploding='1';
+const geo = new THREE.BufferGeometry();
+geo.setAttribute('position', new THREE.BufferAttribute(bP,3));
+geo.setAttribute('aC',       new THREE.BufferAttribute(bC,3));
+geo.setAttribute('aA',       new THREE.BufferAttribute(bA,1));
+geo.setAttribute('aS',       new THREE.BufferAttribute(bS,1));
 
-  setStatus('💎 '+(work.name||'作品')+'がキューブ花火になった！', true);
-
-  // 閃光アニメーション
-  imgEl.classList.remove('visible','popping');
-  void imgEl.offsetWidth;
-  imgEl.classList.add('exploding');
-  if(nameEl) nameEl.classList.remove('visible');
-
-  launchVoxelFirework(imgEl, cx, cy);
-
-  playRocketWhistle();
-
-  setTimeout(()=>{
-    imgEl.classList.remove('exploding');
-    void imgEl.offsetWidth;
-    imgEl.classList.add('visible','popping');
-    if(nameEl) nameEl.classList.add('visible');
-    imgEl.dataset.exploding='0';
-    setTimeout(()=>imgEl.classList.remove('popping'),600);
-  }, 3800);
-}
-
-// ④ ワールドモード：URL読み込んで輪郭花火
-function explodeWorldWork(mesh, work, sx, sy) {
-  if(mesh.userData.exploding==='1') return;
-  mesh.userData.exploding='1';
-  mesh.visible=false;
-  setStatus('💎 '+(work.name||'作品')+'がキューブ花火になった！', true);
-
-  function doExplode(imgSource){
-    launchVoxelFirework(imgSource,sx,sy);
-    playRocketWhistle();
-  }
-
-  if(work.type==='png' && work.url){
-    const img=new Image(); img.crossOrigin='anonymous';
-    img.onload=()=>doExplode(img);
-    img.onerror=()=>{ spawnBurst(sx,sy,true); playWhistle(); setTimeout(()=>playBoom(0.12),420); };
-    img.src=work.url;
-  } else {
-    spawnBurst(sx,sy,true); playWhistle(); setTimeout(()=>playBoom(0.12),420);
-  }
-
-  setTimeout(()=>{ mesh.visible=true; mesh.userData.exploding='0'; },3800);
-}
-
-// ── ワールドレンダラー ──
-const worldCanvas=document.getElementById('worldCanvas');
-const worldRenderer=new THREE.WebGLRenderer({canvas:worldCanvas,alpha:true,antialias:true});
-worldRenderer.setPixelRatio(window.devicePixelRatio);
-worldRenderer.setSize(window.innerWidth,window.innerHeight);
-worldRenderer.setClearColor(0x000000,0);
-const worldScene=new THREE.Scene();
-const worldCamera=new THREE.PerspectiveCamera(75,window.innerWidth/window.innerHeight,0.1,1000);
-worldCamera.position.set(0,0,0);
-worldScene.add(new THREE.AmbientLight(0xffffff,2));
-const worldDir=new THREE.DirectionalLight(0xffffff,1); worldDir.position.set(1,2,1); worldScene.add(worldDir);
-(function(){
-  const geo=new THREE.BufferGeometry(),pos=[];
-  for(let i=0;i<2000;i++){const r=80,t=Math.random()*Math.PI*2,p=Math.acos(2*Math.random()-1);pos.push(r*Math.sin(p)*Math.cos(t),r*Math.sin(p)*Math.sin(t),r*Math.cos(p));}
-  geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
-  worldScene.add(new THREE.Points(geo,new THREE.PointsMaterial({color:0xffffff,size:0.3,transparent:true,opacity:0.8})));
-})();
-
-function placeOnSphere(t,p,r){return new THREE.Vector3(r*Math.cos(p)*Math.cos(t),r*Math.sin(p),r*Math.cos(p)*Math.sin(t));}
-function makeWorkTexture(work){
-  const cv=document.createElement('canvas'); cv.width=256;cv.height=256;
-  const ctx=cv.getContext('2d');
-  const g=ctx.createLinearGradient(0,0,256,256);
-  g.addColorStop(0,'#ff8a00'); g.addColorStop(1,'#7a1f00');
-  ctx.fillStyle=g; ctx.fillRect(0,0,256,256);
-  ctx.fillStyle='rgba(255,255,255,0.18)'; ctx.fillRect(14,14,228,228);
-  if(work.type==='png'&&work.url){
-    const img=new Image(); img.crossOrigin='anonymous';
-    img.onload=()=>{
-      const a=img.width/img.height; let dw=170,dh=170;
-      if(a>1)dh=dw/a; else dw=dh*a;
-      ctx.drawImage(img,128-dw/2,105-dh/2,dw,dh);
-      ctx.fillStyle='#fff'; ctx.font='bold 22px sans-serif'; ctx.textAlign='center';
-      ctx.fillText(work.name||'さくひん',128,220);
-    }; img.src=work.url;
-  } else {
-    ctx.fillStyle='#fff'; ctx.font='bold 22px sans-serif'; ctx.textAlign='center';
-    ctx.fillText(work.name||'さくひん',128,128);
-  }
-  return new THREE.CanvasTexture(cv);
-}
-function rebuildWorldObjects(){
-  state.worldObjects.forEach(o=>worldScene.remove(o.mesh)); state.worldObjects=[];
-  state.works.forEach((work,i)=>{
-    const theta=(i/Math.max(state.works.length,1))*Math.PI*2;
-    const phi=((i%5)-2)*0.22;
-    const pos=placeOnSphere(theta,phi,8);
-    const mesh=new THREE.Mesh(
-      new THREE.PlaneGeometry(1.4,1.4),
-      new THREE.MeshBasicMaterial({map:makeWorkTexture(work),transparent:true,side:THREE.DoubleSide,depthWrite:false})
-    );
-    mesh.position.copy(pos); mesh.lookAt(0,0,0);
-    mesh.userData.baseY=pos.y; mesh.userData.floatSpeed=0.6+Math.random()*0.4;
-    mesh.userData.floatPhase=Math.random()*Math.PI*2; mesh.userData.work=work;
-    mesh.visible=false;
-    worldScene.add(mesh); state.worldObjects.push({mesh,work});
-  });
-  advanceLoading();
-}
-
-// ── カメラレンダラー ──
-const cameraCanvas=document.getElementById('cameraCanvas');
-const cameraRenderer=new THREE.WebGLRenderer({canvas:cameraCanvas,alpha:true,antialias:true});
-cameraRenderer.setPixelRatio(window.devicePixelRatio);
-cameraRenderer.setSize(window.innerWidth,window.innerHeight);
-cameraRenderer.setClearColor(0x000000,0);
-const cameraScene=new THREE.Scene();
-const camThreeCamera=new THREE.PerspectiveCamera(60,window.innerWidth/window.innerHeight,0.1,1000);
-camThreeCamera.position.set(0,0,3);
-cameraScene.add(new THREE.AmbientLight(0xffffff,2));
-const cameraWorks=[],cameraAddedIds=new Set();
-
-// ── 3D パーティクルシステム（マイクラブロック）──
-const P3D_MAX=5000;
-const p3Pos=new Float32Array(P3D_MAX*3);
-const p3Col=new Float32Array(P3D_MAX*3);
-const p3Alp=new Float32Array(P3D_MAX);
-const p3Siz=new Float32Array(P3D_MAX);
-const p3Rot=new Float32Array(P3D_MAX);
-const p3Geo=new THREE.BufferGeometry();
-p3Geo.setAttribute('position',new THREE.BufferAttribute(p3Pos,3));
-p3Geo.setAttribute('aColor',  new THREE.BufferAttribute(p3Col,3));
-p3Geo.setAttribute('aAlpha',  new THREE.BufferAttribute(p3Alp,1));
-p3Geo.setAttribute('aSiz',    new THREE.BufferAttribute(p3Siz,1));
-p3Geo.setAttribute('aRot',    new THREE.BufferAttribute(p3Rot,1));
-const p3Mat=new THREE.ShaderMaterial({
+const mat = new THREE.ShaderMaterial({
   vertexShader:`
-    attribute vec3 aColor;attribute float aAlpha;attribute float aSiz;attribute float aRot;
-    varying vec3 vCol;varying float vAlp;varying float vRot;
+    attribute vec3 aC; attribute float aA,aS;
+    varying vec3 vC; varying float vA;
     void main(){
-      vCol=aColor;vAlp=aAlpha;vRot=aRot;
-      vec4 mv=modelViewMatrix*vec4(position,1.0);
-      gl_PointSize=aSiz*(400.0/-mv.z);
+      vC=aC; vA=aA;
+      vec4 mv=modelViewMatrix*vec4(position,1.);
+      gl_PointSize=aS*(520.0/-mv.z);
       gl_Position=projectionMatrix*mv;
     }`,
   fragmentShader:`
-    varying vec3 vCol;varying float vAlp;varying float vRot;
+    varying vec3 vC; varying float vA;
     void main(){
-      vec2 uv=gl_PointCoord-0.5;
-      float c=cos(vRot);float s=sin(vRot);
-      uv=vec2(c*uv.x-s*uv.y,s*uv.x+c*uv.y)+0.5;
-      if(uv.x<0.02||uv.x>0.98||uv.y<0.02||uv.y>0.98)discard;
-      float b=0.09;
-      if(uv.x<b||uv.x>1.0-b||uv.y<b||uv.y>1.0-b){
-        gl_FragColor=vec4(vCol*0.1,vAlp*0.5);return;
-      }
-      float shade=uv.y<0.36?1.4:(uv.y>0.64?0.6:1.0);
-      if(uv.x<b+0.04) shade*=0.82;
-      if(uv.x>1.0-b-0.04) shade*=0.72;
-      gl_FragColor=vec4(clamp(vCol*shade,0.0,1.0),vAlp);
+      float d=length(gl_PointCoord-vec2(.5))*2.;
+      float core=1.-smoothstep(.0,.26,d);
+      float halo=1.-smoothstep(.12,1.,d);
+      float a=(core*.92+halo*.26)*vA;
+      if(a<.01)discard;
+      gl_FragColor=vec4(clamp(vC*(1.+core*2.6),0.,1.),a);
     }`,
-  transparent:true,blending:THREE.AdditiveBlending,depthWrite:false
-});
-p3Geo.setDrawRange(0,0);
-const p3Points=new THREE.Points(p3Geo,p3Mat);
-cameraScene.add(p3Points);
-
-// ── InstancedMesh 3Dキューブシステム ──
-const CUBE_MAX=256;
-const cubeGeo=new THREE.BoxGeometry(1,1,1);
-const cubeMat=new THREE.MeshBasicMaterial({
   transparent:true, blending:THREE.AdditiveBlending, depthWrite:false
 });
-const cubeInstMesh=new THREE.InstancedMesh(cubeGeo,cubeMat,CUBE_MAX);
-cubeInstMesh.instanceColor=new THREE.InstancedBufferAttribute(new Float32Array(CUBE_MAX*3),3);
-cubeInstMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-cubeInstMesh.count=0;
-cameraScene.add(cubeInstMesh);
+geo.setDrawRange(0,0);
+scene.add(new THREE.Points(geo, mat));
 
-const _cMat4=new THREE.Matrix4(),_cQuat=new THREE.Quaternion();
-const _cScl=new THREE.Vector3(),_cPos3=new THREE.Vector3();
-const _cCol=new THREE.Color(),_cEuler=new THREE.Euler();
-const cubicles=[];
+// ══════════════════════════════════════════════
+// パーティクル 状態配列
+// ══════════════════════════════════════════════
 
-function updateCubicles(){
-  let cnt=0;
-  for(let i=cubicles.length-1;i>=0;i--){
-    const c=cubicles[i];
-    if(c.phase==='travel'){
-      c.tl--;
-      const prog=1-c.tl/c.tf;
-      const e=prog<0.5?2*prog*prog:1-Math.pow(-2*prog+2,2)/2;
-      c.x=c.sx+(c.tx-c.sx)*e; c.y=c.sy+(c.ty-c.sy)*e; c.z=c.sz+(c.tz-c.sz)*e;
-      if(c.tl<=0){c.x=c.tx;c.y=c.ty;c.z=c.tz;c.phase='hold';}
-    } else if(c.phase==='hold'){
-      c.holdFrames--;
-      if(c.holdFrames<=0){
-        c.phase='explode';
-        c.angVX=(Math.random()-0.5)*0.28;
-        c.angVY=(Math.random()-0.5)*0.38;
-        c.angVZ=(Math.random()-0.5)*0.28;
-      }
-    } else {
-      c.x+=c.vx; c.y+=c.vy; c.z+=c.vz;
-      c.vy-=0.0005; c.vx*=0.985; c.vz*=0.985;
-      c.rotX+=c.angVX; c.rotY+=c.angVY; c.rotZ+=c.angVZ;
-      c.life-=c.decay;
-      if(c.life<=0){cubicles.splice(i,1);continue;}
-    }
-    if(cnt>=CUBE_MAX)continue;
-    const alive=c.phase==='explode'?c.life:(c.phase==='hold'?1.0:(1-c.tl/c.tf)*0.85);
-    const sz=c.size*(c.phase==='travel'?0.35+0.65*(1-c.tl/c.tf):1.0);
-    _cEuler.set(c.rotX,c.rotY,c.rotZ);
-    _cQuat.setFromEuler(_cEuler);
-    _cPos3.set(c.x,c.y,c.z);
-    _cScl.set(sz,sz,sz);
-    _cMat4.compose(_cPos3,_cQuat,_cScl);
-    cubeInstMesh.setMatrixAt(cnt,_cMat4);
-    const glow=c.phase==='explode'?0.75+c.life*1.0:1.6;
-    _cCol.setRGB(
-      Math.min(1,c.r/255*glow*alive),
-      Math.min(1,c.g/255*glow*alive),
-      Math.min(1,c.b/255*glow*alive)
-    );
-    cubeInstMesh.setColorAt(cnt,_cCol);
+const ps = [];
+
+function addP(x,y,z, vx,vy,vz, r,g,b, decay, s){
+  ps.push({x,y,z,vx,vy,vz,r,g,b,a:1.0,decay,s});
+}
+
+function updateParticles(){
+  let cnt = 0;
+  for(let i=ps.length-1; i>=0; i--){
+    const p = ps[i];
+    p.x+=p.vx; p.y+=p.vy; p.z+=p.vz;
+    p.vy -= 0.0030;      // 重力
+    p.vx *= 0.983;
+    p.vy *= 0.983;
+    p.vz *= 0.968;       // Z 方向は強めに減衰（カメラ超えを防ぐ）
+    p.a  -= p.decay;
+    if(p.a <= 0){ ps.splice(i,1); continue; }
+    if(cnt >= MAX) continue;
+    bP[cnt*3]=p.x; bP[cnt*3+1]=p.y; bP[cnt*3+2]=p.z;
+    bC[cnt*3]=p.r; bC[cnt*3+1]=p.g; bC[cnt*3+2]=p.b;
+    bA[cnt]=p.a;   bS[cnt]=p.s;
     cnt++;
   }
-  cubeInstMesh.count=cnt;
-  cubeInstMesh.instanceMatrix.needsUpdate=true;
-  if(cubeInstMesh.instanceColor)cubeInstMesh.instanceColor.needsUpdate=true;
+  for(let j=cnt; j<Math.min(cnt+40,MAX); j++) bA[j]=0;
+  geo.setDrawRange(0,cnt);
+  geo.attributes.position.needsUpdate=true;
+  geo.attributes.aC.needsUpdate=true;
+  geo.attributes.aA.needsUpdate=true;
+  geo.attributes.aS.needsUpdate=true;
 }
 
-const _cc2=document.createElement('canvas').getContext('2d');
-function cssToRgb(css){
-  _cc2.fillStyle=css;
-  const h=_cc2.fillStyle;
-  return [parseInt(h.slice(1,3),16)/255,parseInt(h.slice(3,5),16)/255,parseInt(h.slice(5,7),16)/255];
-}
-function screenTo3D(sx,sy,z=0){
-  const d=camThreeCamera.position.z-z;
-  const halfH=d*Math.tan(THREE.MathUtils.degToRad(camThreeCamera.fov/2));
-  const halfW=halfH*camThreeCamera.aspect;
-  return new THREE.Vector3(((sx/window.innerWidth)*2-1)*halfW,(-(sy/window.innerHeight)*2+1)*halfH,z);
-}
+// ══════════════════════════════════════════════
+// 花火カラーパレット
+// ══════════════════════════════════════════════
 
-const particles3D=[];
-function update3DParticles(){
-  let cnt=0;
-  for(let i=particles3D.length-1;i>=0;i--){
-    const p=particles3D[i];
-    if(p.phase==='travel'){
-      p.tl--;
-      const prog=1-p.tl/p.tf;
-      const e=prog<0.5?2*prog*prog:1-Math.pow(-2*prog+2,2)/2;
-      p.x=p.sx+(p.tx-p.sx)*e; p.y=p.sy+(p.ty-p.sy)*e; p.z=p.sz+(p.tz-p.sz)*e;
-      if(p.tl<=0){p.x=p.tx;p.y=p.ty;p.z=p.tz;p.phase='expand';}
-    } else if(p.phase==='expand'){
-      p.x+=p.vx;p.y+=p.vy;p.z+=p.vz;
-      p.ef--;
-      if(p.ef<=0){
-        p.phase='fall';
-        if(p.evx!==undefined){p.vx=p.evx;p.vy=p.evy;p.vz=p.evz;}
-        if(p.angV!==undefined) p.angV=(Math.random()-0.5)*0.38;
-      }
-    } else {
-      p.x+=p.vx;p.y+=p.vy;p.z+=p.vz;
-      p.vy-=0.0006;p.vx*=0.98;p.vz*=0.97;
-      if(p.rot!==undefined) p.rot+=p.angV||0;
-      p.life-=p.decay;
-      if(p.life<=0){particles3D.splice(i,1);continue;}
-    }
-    if(cnt>=P3D_MAX)continue;
-    p3Pos[cnt*3]=p.x;p3Pos[cnt*3+1]=p.y;p3Pos[cnt*3+2]=p.z;
-    p3Col[cnt*3]=p.c[0];p3Col[cnt*3+1]=p.c[1];p3Col[cnt*3+2]=p.c[2];
-    const al=p.phase==='fall'?p.life*0.9:p.phase==='expand'?0.95:0.6;
-    p3Alp[cnt]=al;
-    p3Siz[cnt]=p.s*(p.phase==='travel'?0.6:1.0);
-    p3Rot[cnt]=p.rot||0;
-    cnt++;
+const PALETTES = [
+  [[1,.22,.05],[1,.55,.1],[1,.9,.2],[1,1,1]],     // 赤橙金
+  [[.12,.38,1],[.45,.72,1],[.8,.9,1],[1,1,1]],    // 青白
+  [[.05,1,.28],[.55,1,.12],[1,1,.28],[1,1,1]],    // 緑黄
+  [[.88,.08,1],[1,.38,.9],[1,.72,1],[1,1,1]],     // 紫ピンク
+  [[1,.80,.05],[1,.92,.42],[1,1,.88],[1,1,1]],    // ゴールド
+  [[1,.15,.15],[.1,.88,1],[1,1,.32],[1,1,1]],     // 三色
+];
+
+// ══════════════════════════════════════════════
+// 爆発パーティクル生成
+// ══════════════════════════════════════════════
+
+function burst(x, y, z, pal){
+  // ── メイン火花（球状放射）──
+  for(let i=0; i<200; i++){
+    const theta = Math.random()*Math.PI*2;
+    const phi   = Math.acos(2*Math.random()-1);   // 均一球面分布
+    const sp    = 0.038 + Math.random()*0.085;
+
+    // 15% の火花をカメラ方向（+Z）に余分に飛ばす
+    const zFwd  = (Math.random() < 0.15) ? 0.055 + Math.random()*0.045 : 0;
+
+    const c = pal[Math.floor(Math.random()*pal.length)];
+    addP(x,y,z,
+      Math.sin(phi)*Math.cos(theta)*sp,
+      Math.sin(phi)*Math.sin(theta)*sp,
+      Math.cos(phi)*sp*0.58 + zFwd,
+      c[0],c[1],c[2],
+      0.004+Math.random()*0.006,
+      0.26+Math.random()*0.32);
   }
-  for(let i=cnt;i<Math.min(cnt+200,P3D_MAX);i++)p3Alp[i]=0;
-  p3Geo.setDrawRange(0,cnt);
-  p3Geo.attributes.position.needsUpdate=true;
-  p3Geo.attributes.aColor.needsUpdate=true;
-  p3Geo.attributes.aAlpha.needsUpdate=true;
-  p3Geo.attributes.aSiz.needsUpdate=true;
-  p3Geo.attributes.aRot.needsUpdate=true;
+
+  // ── キラキラ（ゆっくり落ちる長寿命）──
+  for(let i=0; i<30; i++){
+    const c = pal[Math.floor(Math.random()*pal.length)];
+    const a = Math.random()*Math.PI*2;
+    const r = 0.05+Math.random()*0.12;
+    addP(x+Math.cos(a)*r, y+Math.sin(a)*r, z+(Math.random()-.5)*.2,
+      (Math.random()-.5)*.018, 0.015+Math.random()*0.025, (Math.random()-.5)*.015,
+      c[0],c[1],c[2],
+      0.003+Math.random()*0.003,
+      0.45+Math.random()*0.40);
+  }
+
+  // ── 中心フラッシュ（即消え）──
+  for(let i=0; i<14; i++){
+    addP(x,y,z,
+      (Math.random()-.5)*.025, (Math.random()-.5)*.025, (Math.random()-.5)*.025,
+      1,1,1,
+      0.065+Math.random()*0.055,
+      0.55+Math.random()*0.60);
+  }
+
+  setTimeout(()=>boom(), 55);
 }
 
-function rebuildCameraOverlays(){
-  document.querySelectorAll('.ar-work-overlay,.ar-work-name').forEach(el=>el.remove());
-  cameraWorks.length=0; cameraAddedIds.clear();
-  state.works.forEach((work,idx)=>{
-    if(cameraAddedIds.has(work.id))return;
-    cameraAddedIds.add(work.id);
-    const angle=idx*(Math.PI*2/Math.max(state.works.length,6));
-    const r=1.2, x=Math.cos(angle)*r, y=Math.sin(angle)*r*0.6;
-    const cx=window.innerWidth/2+x*120, cy=window.innerHeight/2-y*120;
+// ══════════════════════════════════════════════
+// ロケット
+// ══════════════════════════════════════════════
 
-    if(work.type==='png'&&work.url){
-      const imgEl=document.createElement('img');
-      imgEl.src=work.url; imgEl.crossOrigin='anonymous';
-      imgEl.className='ar-work-overlay';
-      imgEl.dataset.baseX=String(cx-60); imgEl.dataset.baseY=String(cy-60);
-      imgEl.dataset.cx=String(cx); imgEl.dataset.cy=String(cy);
-      imgEl.dataset.height='120'; imgEl.dataset.workId=work.id; imgEl.dataset.exploding='0';
-      imgEl.style.left=(cx-60)+'px'; imgEl.style.top=(cy-60)+'px';
-      imgEl.style.width='120px'; imgEl.style.height='120px';
-      const nameEl=document.createElement('div');
-      nameEl.id='name_'+work.id; nameEl.className='ar-work-name';
-      nameEl.textContent=work.name||'なまえなし';
-      nameEl.style.left=(cx-60)+'px'; nameEl.style.top=(cy+65)+'px'; nameEl.style.width='120px';
-      document.body.appendChild(imgEl); document.body.appendChild(nameEl);
-      // タップで輪郭花火化！
-      imgEl.addEventListener('click',e=>{
-        e.stopPropagation();
-        const rect=imgEl.getBoundingClientRect();
-        const acx=rect.left+rect.width/2, acy=rect.top+rect.height/2;
-        explodeWorkToFirework(imgEl,nameEl,work,acx,acy);
-      });
-    } else {
-      // PNG以外はPlaneメッシュで表示
-      const mesh=new THREE.Mesh(
-        new THREE.PlaneGeometry(0.9,0.9),
-        new THREE.MeshBasicMaterial({map:makeWorkTexture(work),transparent:true,side:THREE.DoubleSide})
-      );
-      mesh.position.set(x,y,0);
-      mesh.userData.baseY=y; mesh.userData.phase=Math.random()*Math.PI*2;
-      mesh.userData.cx=cx; mesh.userData.cy=cy; mesh.userData.work=work;
-      mesh.visible=false;
-      cameraScene.add(mesh); cameraWorks.push({mesh,work});
+const rockets = [];
+
+function launch(wx, wy1, wz, pal){
+  rockets.push({ x:wx, z:wz, y0:-5.5, y1:wy1, t:0, pal, trail:0 });
+  whistle();
+}
+
+function updateRockets(){
+  for(let i=rockets.length-1; i>=0; i--){
+    const r = rockets[i];
+    r.t = Math.min(1, r.t+0.017);                 // ~59フレームで頂点
+    const e = r.t<.5 ? 2*r.t*r.t : 1-(-2*r.t+2)**2/2; // easeInOut
+    const ry = r.y0 + (r.y1-r.y0)*e;
+
+    // トレイル（2フレームごとに3粒）
+    r.trail++;
+    if(r.trail % 2 === 0){
+      for(let k=0; k<3; k++){
+        addP(
+          r.x+(Math.random()-.5)*.06,
+          ry+(Math.random()-.5)*.06,
+          r.z+(Math.random()-.5)*.06,
+          (Math.random()-.5)*.008,
+          -0.014-Math.random()*.012,
+          (Math.random()-.5)*.008,
+          1, 0.82+Math.random()*.18, 0.3+Math.random()*.3,
+          0.048+Math.random()*0.05,
+          0.18+Math.random()*0.14);
+      }
+      // 先端の白い光点
+      addP(r.x,ry,r.z, 0,0,0, 1,1,1, 0.55, 0.42);
     }
-  });
-  advanceLoading();
-}
 
-let cameraStreamStarted=false;
-function startCamera(){
-  if(cameraStreamStarted)return;
-  navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}})
-    .then(s=>{els.cameraVideo.srcObject=s;cameraStreamStarted=true;})
-    .catch(()=>setStatus('カメラの許可が必要です',false));
-}
-
-// ── ジャイロ ──
-let gyroYaw=0,gyroPitch=0,prevAlpha=null;
-const zee=new THREE.Vector3(0,0,1),euler_g=new THREE.Euler();
-const q0_g=new THREE.Quaternion(),q1_g=new THREE.Quaternion(-Math.sqrt(0.5),0,0,Math.sqrt(0.5));
-
-function updateOverlayPositions(){
-  document.querySelectorAll('.ar-work-overlay').forEach(el=>{
-    const bx=parseFloat(el.dataset.baseX||'0'),by=parseFloat(el.dataset.baseY||'0');
-    const nl=bx+gyroYaw*4,nt=by+gyroPitch*4;
-    el.style.left=nl+'px'; el.style.top=nt+'px';
-    const ne=document.getElementById('name_'+el.dataset.workId);
-    if(ne){ne.style.left=nl+'px';ne.style.top=(nt+parseInt(el.dataset.height||'120',10)+5)+'px';}
-  });
-}
-
-// ── 作品トグル ──
-function showWorks(){
-  state.worksVisible=true;
-  setStatus('🎆 作品が現れた！作品タップで輪郭花火に変身！',true);
-  document.querySelectorAll('.ar-work-overlay').forEach((el,i)=>{
-    setTimeout(()=>{
-      el.classList.remove('exploding','popping');
-      el.classList.add('visible');
-      const ne=document.getElementById('name_'+el.dataset.workId);
-      if(ne)ne.classList.add('visible');
-      spawnBurst(parseFloat(el.dataset.cx||0),parseFloat(el.dataset.cy||0),true);
-    },i*200);
-  });
-  cameraWorks.forEach(({mesh},i)=>setTimeout(()=>{
-    mesh.visible=true;
-    spawnBurst(mesh.userData.cx||window.innerWidth/2,mesh.userData.cy||window.innerHeight/2,true);
-  },i*200));
-  state.worldObjects.forEach(({mesh},i)=>setTimeout(()=>{
-    mesh.visible=true;
-    mesh.userData.discovered=false; // 発見フラグリセット
-    const v=mesh.position.clone().project(worldCamera);
-    const sx=(v.x+1)/2*window.innerWidth,sy=-(v.y-1)/2*window.innerHeight;
-    if(sx>30&&sx<window.innerWidth-30&&sy>60&&sy<window.innerHeight-100){
-      mesh.userData.discovered=true;
-      spawnBurst(sx,sy,true);
+    if(r.t >= 1){
+      burst(r.x, r.y1, r.z, r.pal);
+      rockets.splice(i,1);
     }
-  },i*200));
-}
-function hideWorks(){
-  state.worksVisible=false;
-  setStatus(state.mode==='camera'?'📷 タップして作品を出そう！':'✨ タップして作品を出そう！',true);
-  document.querySelectorAll('.ar-work-overlay').forEach(el=>el.classList.remove('visible','popping'));
-  document.querySelectorAll('.ar-work-name').forEach(el=>el.classList.remove('visible'));
-  cameraWorks.forEach(({mesh})=>{mesh.visible=false;});
-  state.worldObjects.forEach(({mesh})=>{mesh.visible=false;mesh.userData.discovered=false;});
+  }
 }
 
-// ── 花火エフェクト（音量30%） ──
-const fxCanvas=document.getElementById('fxCanvas');
-fxCanvas.width=window.innerWidth; fxCanvas.height=window.innerHeight;
-const fx2d=fxCanvas.getContext('2d');
-const particles2D=[];
-let audioCtx=null;
-function getAudio(){
-  if(!audioCtx)audioCtx=new(window.AudioContext||window.webkitAudioContext)();
-  if(audioCtx.state==='suspended')audioCtx.resume();
+// ══════════════════════════════════════════════
+// タップ → ワールド座標
+// ══════════════════════════════════════════════
+
+function tapToWorld(sx, sy, wz){
+  const ndcX = (sx/innerWidth)*2-1;
+  const ndcY = -(sy/innerHeight)*2+1;
+  const v = new THREE.Vector3(ndcX, ndcY, 0.5).unproject(cam);
+  v.sub(cam.position).normalize();
+  const t = Math.abs(v.z) > 1e-4 ? (wz-cam.position.z)/v.z : 10;
+  return {
+    x: cam.position.x + v.x*t,
+    y: cam.position.y + v.y*t,
+  };
+}
+
+function onTap(e){
+  try{ if(audioCtx) audioCtx.resume(); }catch(_){}
+  const touch = e.changedTouches ? e.changedTouches[0] : e;
+  const wz  = -11 - Math.random()*3;
+  const wp  = tapToWorld(touch.clientX, touch.clientY, wz);
+  const wy1 = Math.max(1.5, Math.min(8.0, wp.y)); // 爆発高さをクランプ
+  const pal = PALETTES[Math.floor(Math.random()*PALETTES.length)];
+  launch(wp.x + (Math.random()-.5)*.6, wy1, wz, pal);
+}
+
+cv.addEventListener('touchstart', onTap, {passive:true});
+cv.addEventListener('click', onTap);
+
+// ══════════════════════════════════════════════
+// ジャイロ（device orientation）
+// ══════════════════════════════════════════════
+
+let gyroOn = false;
+let gA=0, gB=0, gG=0;
+const euG = new THREE.Euler();
+const q1G = new THREE.Quaternion(-Math.sqrt(.5),0,0,Math.sqrt(.5));
+const q2G = new THREE.Quaternion();
+const zeeG = new THREE.Vector3(0,0,1);
+const R = THREE.MathUtils.degToRad;
+
+function updateCamera(){
+  if(xrActive) return;
+  if(!gyroOn){
+    cam.rotation.order = 'YXZ';
+    cam.rotation.set(-0.28, 0, 0); // 上向き固定（ジャイロなし）
+    return;
+  }
+  const heading = R(360 - gA);
+  euG.set(R(gB), R(gA), R(-gG), 'YXZ');
+  cam.quaternion.setFromEuler(euG);
+  cam.quaternion.multiply(q1G);
+  q2G.setFromAxisAngle(zeeG, -heading);
+  cam.quaternion.multiply(q2G);
+}
+
+function startGyro(){
+  gyroOn = true;
+  window.addEventListener('deviceorientation', e=>{
+    if(e.alpha===null) return;
+    gA=e.alpha; gB=e.beta; gG=e.gamma;
+  }, true);
+}
+
+function checkPerm(){
+  if(typeof DeviceOrientationEvent === 'undefined') return;
+  if(typeof DeviceOrientationEvent.requestPermission === 'function'){
+    document.getElementById('perm').style.display = 'flex';
+  } else {
+    startGyro();
+  }
+}
+
+function grantPerm(){
+  DeviceOrientationEvent.requestPermission()
+    .then(s=>{
+      document.getElementById('perm').style.display = 'none';
+      if(s==='granted') startGyro();
+    })
+    .catch(()=>{ document.getElementById('perm').style.display = 'none'; });
+}
+
+// ══════════════════════════════════════════════
+// カメラストリーム
+// ══════════════════════════════════════════════
+
+const vid = document.getElementById('vid');
+navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}})
+  .then(s=>{ vid.srcObject=s; })
+  .catch(()=>{ vid.style.display='none'; document.body.style.background='#04001a'; });
+
+// ══════════════════════════════════════════════
+// WebXR（オプション）
+// ══════════════════════════════════════════════
+
+let xrActive = false;
+
+(async()=>{
+  if(!navigator.xr) return;
+  try{
+    const ok = await navigator.xr.isSessionSupported('immersive-ar');
+    if(ok) document.getElementById('xrbtn').style.display = 'block';
+  }catch(_){}
+})();
+
+async function enterXR(){
+  try{
+    const s = await navigator.xr.requestSession('immersive-ar',{
+      requiredFeatures:['local'],
+      optionalFeatures:['dom-overlay'],
+      domOverlay:{root:document.getElementById('ui')}
+    });
+    ren.xr.enabled = true; xrActive = true;
+    await ren.xr.setSession(s);
+    vid.style.display = 'none';
+    ren.setAnimationLoop(tick);
+    s.addEventListener('end',()=>{
+      ren.xr.enabled = false; xrActive = false;
+      vid.style.display = '';
+      ren.setAnimationLoop(null);
+      requestAnimationFrame(loop);
+    });
+  }catch(e){ console.warn('WebXR:', e); }
+}
+
+// ══════════════════════════════════════════════
+// オーディオ
+// ══════════════════════════════════════════════
+
+let audioCtx = null;
+
+function getAu(){
+  if(!audioCtx) audioCtx = new(window.AudioContext||window.webkitAudioContext)();
+  audioCtx.resume();
   return audioCtx;
 }
-function playBoom(vol=0.09){
+
+function whistle(){
   try{
-    const ctx=getAudio(),sr=ctx.sampleRate,n=Math.floor(sr*0.5);
-    const buf=ctx.createBuffer(1,n,sr),d=buf.getChannelData(0);
-    for(let i=0;i<n;i++)d[i]=(Math.random()*2-1)*Math.exp(-i/(n*0.12));
-    const src=ctx.createBufferSource();src.buffer=buf;
+    const ctx=getAu(), o=ctx.createOscillator(), g=ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.type='sine';
+    o.frequency.setValueAtTime(200, ctx.currentTime);
+    o.frequency.exponentialRampToValueAtTime(2400, ctx.currentTime+1.15);
+    g.gain.setValueAtTime(.038, ctx.currentTime);
+    g.gain.linearRampToValueAtTime(0, ctx.currentTime+1.15);
+    o.start(); o.stop(ctx.currentTime+1.15);
+  }catch(_){}
+}
+
+function boom(vol=0.30){
+  try{
+    const ctx=getAu(), sr=ctx.sampleRate;
+    const n=Math.floor(sr*.82);
+    const buf=ctx.createBuffer(1,n,sr), d=buf.getChannelData(0);
+    for(let i=0;i<n;i++) d[i]=(Math.random()*2-1)*Math.exp(-i/(n*.10));
+    const src=ctx.createBufferSource(); src.buffer=buf;
     const g=ctx.createGain();
-    g.gain.setValueAtTime(vol,ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.5);
-    src.connect(g);g.connect(ctx.destination);src.start();
-  }catch(e){}
-}
-function playGrandBoom(){
-  try{
-    const ctx=getAudio(),sr=ctx.sampleRate,n=Math.floor(sr*0.9);
-    const buf=ctx.createBuffer(1,n,sr),d=buf.getChannelData(0);
-    for(let i=0;i<n;i++)d[i]=(Math.random()*2-1)*Math.exp(-i/(n*0.14));
-    const src=ctx.createBufferSource();src.buffer=buf;
-    const g=ctx.createGain();
-    g.gain.setValueAtTime(0.22,ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.9);
-    src.connect(g);g.connect(ctx.destination);src.start();
-    setTimeout(()=>playBoom(0.08),220);
-    setTimeout(()=>playBoom(0.04),480);
-  }catch(e){}
-}
-function playWhistle(){
-  try{
-    const ctx=getAudio(),osc=ctx.createOscillator(),g=ctx.createGain();
-    osc.connect(g);g.connect(ctx.destination);osc.type='sine';
-    osc.frequency.setValueAtTime(300,ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(1500,ctx.currentTime+0.45);
-    g.gain.setValueAtTime(0.03,ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.45);
-    osc.start(ctx.currentTime);osc.stop(ctx.currentTime+0.45);
-  }catch(e){}
-}
-function playRocketWhistle(){
-  try{
-    const ctx=getAudio(),osc=ctx.createOscillator(),g=ctx.createGain();
-    osc.connect(g);g.connect(ctx.destination);osc.type='sine';
-    osc.frequency.setValueAtTime(180,ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(2200,ctx.currentTime+0.53);
-    g.gain.setValueAtTime(0.05,ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.53);
-    osc.start(ctx.currentTime);osc.stop(ctx.currentTime+0.53);
-  }catch(e){}
-}
-function spawnBurst(sx,sy,big=false){
-  const cols=['#ff6644','#ff9900','#ffee22','#44ffaa','#44aaff','#dd44ff','#ff88dd','#44ffff','#ffffff','#ffcc44'];
-  const cnt=big?100:55;
-  const pos=screenTo3D(sx,sy,0);
-  for(let i=0;i<cnt;i++){
-    const theta=Math.random()*Math.PI*2,phi=Math.acos(2*Math.random()-1);
-    const sp=0.014+Math.random()*(big?0.055:0.035);
-    particles3D.push({
-      x:pos.x,y:pos.y,z:pos.z,
-      vx:Math.sin(phi)*Math.cos(theta)*sp,
-      vy:Math.sin(phi)*Math.sin(theta)*sp,
-      vz:Math.cos(phi)*sp*0.5,
-      c:cssToRgb(cols[Math.floor(Math.random()*cols.length)]),
-      life:1,decay:0.009+Math.random()*0.015,
-      s:0.055+Math.random()*(big?0.09:0.055),phase:'fall',
-      rot:Math.random()*Math.PI*2, angV:(Math.random()-0.5)*0.24
-    });
-  }
-  // shimmer
-  for(let i=0;i<(big?25:8);i++){
-    const a=Math.random()*Math.PI*2,r=Math.random()*0.28;
-    particles3D.push({
-      x:pos.x+Math.cos(a)*r,y:pos.y+Math.sin(a)*r,z:pos.z+(Math.random()-0.5)*0.2,
-      vx:(Math.random()-0.5)*0.016,vy:0.01+Math.random()*0.028,vz:(Math.random()-0.5)*0.01,
-      c:[1,0.93,0.27],life:1,decay:0.009+Math.random()*0.008,
-      s:0.045+Math.random()*0.045,phase:'fall',
-      rot:Math.random()*Math.PI*2, angV:(Math.random()-0.5)*0.2
-    });
-  }
-  playWhistle();
-  setTimeout(()=>playBoom(big?0.14:0.09),420);
+    g.gain.setValueAtTime(vol, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(.001, ctx.currentTime+.82);
+    src.connect(g); g.connect(ctx.destination); src.start();
+    if(vol > .10) setTimeout(()=>boom(vol*.28), 290); // 残響
+  }catch(_){}
 }
 
-function renderFX(){
-  fx2d.clearRect(0,0,fxCanvas.width,fxCanvas.height);
-  // ロケット軌跡のみ2Dで描画
-  fx2d.globalCompositeOperation='lighter';
-  for(let i=particles2D.length-1;i>=0;i--){
-    const p=particles2D[i];
-    if(p.type!=='rocket'){particles2D.splice(i,1);continue;}
-    p.travelLeft--;
-    const prog=1-p.travelLeft/p.travelFrames;
-    p.x=p.startX+(p.targetX-p.startX)*(prog*prog);
-    p.y=p.startY+(p.targetY-p.startY)*(prog*prog);
-    if(p.travelLeft<=0){particles2D.splice(i,1);continue;}
-    const tail=Math.min(1,p.travelLeft/10);
-    fx2d.globalAlpha=tail*0.95;
-    fx2d.fillStyle='#fffde0';
-    fx2d.beginPath();fx2d.arc(p.x,p.y,p.size*0.8,0,Math.PI*2);fx2d.fill();
-    const gl=fx2d.createRadialGradient(p.x,p.y,0,p.x,p.y,p.size*7);
-    gl.addColorStop(0,'rgba(255,240,180,0.7)');
-    gl.addColorStop(0.3,'rgba(255,130,30,0.35)');
-    gl.addColorStop(1,'rgba(255,80,0,0)');
-    fx2d.globalAlpha=tail*0.7;fx2d.fillStyle=gl;
-    fx2d.beginPath();fx2d.arc(p.x,p.y,p.size*7,0,Math.PI*2);fx2d.fill();
-    fx2d.globalAlpha=1;
-  }
-  fx2d.globalCompositeOperation='source-over';
-  fx2d.globalAlpha=1;
+// ══════════════════════════════════════════════
+// メインループ
+// ══════════════════════════════════════════════
+
+function tick(){
+  updateCamera();
+  updateRockets();
+  updateParticles();
+  ren.render(scene, cam);
 }
 
+function loop(){ requestAnimationFrame(loop); tick(); }
+loop();
 
-// ── タップハンドラ ──
-const worldRaycaster=new THREE.Raycaster();
-const worldMouse=new THREE.Vector2();
-
-function handleWorldClick(e){
-  try{getAudio().resume();}catch(err){}
-  worldMouse.x=(e.clientX/window.innerWidth)*2-1;
-  worldMouse.y=-(e.clientY/window.innerHeight)*2+1;
-  worldRaycaster.setFromCamera(worldMouse,worldCamera);
-  const hits=worldRaycaster.intersectObjects(state.worldObjects.filter(o=>o.mesh.visible).map(o=>o.mesh));
-  if(hits.length>0){
-    const obj=state.worldObjects.find(o=>o.mesh===hits[0].object);
-    if(obj){
-      const v=obj.mesh.position.clone().project(worldCamera);
-      const sx=(v.x+1)/2*window.innerWidth,sy=-(v.y-1)/2*window.innerHeight;
-      explodeWorldWork(obj.mesh,obj.work,sx,sy);
-    }
-  } else {
-    spawnBurst(e.clientX,e.clientY,false);
-    if(!state.worksVisible)showWorks(); else hideWorks();
-  }
-}
-function handleCameraClick(e){
-  try{getAudio().resume();}catch(err){}
-  spawnBurst(e.clientX,e.clientY,false);
-  if(!state.worksVisible)showWorks(); else hideWorks();
-}
-cameraCanvas.style.pointerEvents='auto';
-cameraCanvas.addEventListener('click',handleCameraClick);
-worldCanvas.addEventListener('click',handleWorldClick);
-
-// ── ジャイロ設定 ──
-function startGyro(){
-  state.useGyro=true;
-  window.addEventListener('deviceorientation',e=>{
-    if(e.alpha===null)return;
-    const heading=e.webkitCompassHeading!=null
-      ?THREE.MathUtils.degToRad(e.webkitCompassHeading)
-      :THREE.MathUtils.degToRad(360-e.alpha);
-    euler_g.set(THREE.MathUtils.degToRad(e.beta),THREE.MathUtils.degToRad(e.alpha),THREE.MathUtils.degToRad(-e.gamma),'YXZ');
-    worldCamera.quaternion.setFromEuler(euler_g);
-    worldCamera.quaternion.multiply(q1_g);
-    worldCamera.quaternion.multiply(q0_g.setFromAxisAngle(zee,-heading));
-    if(prevAlpha!==null){let da=e.alpha-prevAlpha;if(da>180)da-=360;if(da<-180)da+=360;gyroYaw-=da;}
-    prevAlpha=e.alpha; gyroPitch=(e.beta||0)-90;
-  },true);
-}
-function requestGyroPermission(){
-  DeviceOrientationEvent.requestPermission().then(s=>{
-    els.gyroPrompt.style.display='none';if(s==='granted')startGyro();
-  }).catch(()=>els.gyroPrompt.style.display='none');
-}
-if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){
-  els.gyroPrompt.style.display='flex';
-}else if(typeof DeviceOrientationEvent!=='undefined'){startGyro();}
-
-let mouseDown=false,lastMX=0,lastMY=0;
-worldCanvas.addEventListener('mousedown',e=>{mouseDown=true;lastMX=e.clientX;lastMY=e.clientY;});
-worldCanvas.addEventListener('mousemove',e=>{
-  if(!mouseDown||state.useGyro)return;
-  state.yaw+=(e.clientX-lastMX)*0.005;state.pitch+=(e.clientY-lastMY)*0.003;
-  state.pitch=Math.max(-Math.PI/2.5,Math.min(Math.PI/2.5,state.pitch));
-  lastMX=e.clientX;lastMY=e.clientY;
-});
-window.addEventListener('mouseup',()=>mouseDown=false);
-worldCanvas.addEventListener('touchstart',e=>{lastMX=e.touches[0].clientX;lastMY=e.touches[0].clientY;},{passive:true});
-worldCanvas.addEventListener('touchmove',e=>{
-  if(state.useGyro)return;
-  state.yaw+=(e.touches[0].clientX-lastMX)*0.005;state.pitch+=(e.touches[0].clientY-lastMY)*0.003;
-  state.pitch=Math.max(-Math.PI/2.5,Math.min(Math.PI/2.5,state.pitch));
-  lastMX=e.touches[0].clientX;lastMY=e.touches[0].clientY;
-},{passive:true});
-
-// ── ビューア ──
-const viewerCanvas=document.getElementById('viewerCanvas');
-let viewerRenderer,viewerScene,viewerCamera,viewerModel,viewerAnimId;
-let isDragging=false,lastX=0,lastY=0,rotX=0,rotY=0;
-function openViewer(){
-  if(!state.currentWork&&state.works[0])state.currentWork=state.works[0];
-  if(!state.currentWork)return;
-  els.viewerModal.style.display='block';loadViewerWork(state.currentWork);
-}
-function closeViewer(){els.viewerModal.style.display='none';}
-function loadViewerWork(work){
-  els.viewerName.textContent=work.name||'なまえなし';
-  els.viewerLoading.style.display='flex';els.viewerImage.style.display='none';viewerCanvas.style.display='none';
-  if(work.type==='png'&&work.url){
-    els.viewerImage.src=work.url;
-    els.viewerImage.onload=()=>{els.viewerLoading.style.display='none';els.viewerImage.style.display='block';};
-    els.viewerImage.onerror=()=>{els.viewerLoading.innerHTML='<div>読み込みに失敗しました</div>';};
-  } else {
-    els.viewerLoading.innerHTML='<div>表示できる作品がありません</div>';
-  }
-}
-viewerCanvas.addEventListener('mousedown',e=>{isDragging=true;lastX=e.clientX;lastY=e.clientY;});
-viewerCanvas.addEventListener('mousemove',e=>{if(!isDragging)return;rotY+=(e.clientX-lastX)*0.01;rotX+=(e.clientY-lastY)*0.01;lastX=e.clientX;lastY=e.clientY;});
-window.addEventListener('mouseup',()=>isDragging=false);
-
-// ── Firebase ──
-db.ref('works').on('value',snap=>{
-  const data=snap.val()||{};
-  state.works=Object.entries(data).map(([k,v])=>({id:k,...v}))
-    .filter(w=>w.type==='png'); // PNG作品のみ
-  if(state.works.length===0){advanceLoading(state.loadingGoal);return;}
-  els.workCount.textContent=state.works.length+' 作品';
-  if(!state.currentWork)state.currentWork=state.works[0];
-  rebuildWorldObjects();rebuildCameraOverlays();selectWork(state.currentWork.id);
-  setStatus('✨ タップして作品を出そう！',true);
-});
-
-// ── メインループ ──
-let time=0;
-function animate(){
-  requestAnimationFrame(animate);time+=0.016;
-  if(!state.useGyro){worldCamera.rotation.order='YXZ';worldCamera.rotation.y=state.yaw;worldCamera.rotation.x=state.pitch;}
-  state.worldObjects.forEach(({mesh,work})=>{
-    if(mesh.visible){
-      mesh.position.y=mesh.userData.baseY+Math.sin(time*mesh.userData.floatSpeed+mesh.userData.floatPhase)*0.15;
-      mesh.lookAt(0,0,0);
-      // 画面内に入ったら発見バースト
-      if(!mesh.userData.discovered){
-        const v=mesh.position.clone().project(worldCamera);
-        const sx=(v.x+1)/2*window.innerWidth, sy=-(v.y-1)/2*window.innerHeight;
-        if(sx>30&&sx<window.innerWidth-30&&sy>60&&sy<window.innerHeight-100){
-          mesh.userData.discovered=true;
-          setStatus('✨ '+(work.name||'作品')+'を発見！タップして花火に！',true);
-          spawnBurst(sx,sy,true);
-        }
-      }
-    }
-  });
-  cameraWorks.forEach(({mesh})=>{if(mesh.visible)mesh.position.y=mesh.userData.baseY+Math.sin(time+mesh.userData.phase)*0.06;});
-  updateOverlayPositions();renderFX();update3DParticles();updateCubicles();
-  if(!els.worldStage.classList.contains('hidden'))worldRenderer.render(worldScene,worldCamera);
-  if(!els.cameraStage.classList.contains('hidden'))cameraRenderer.render(cameraScene,camThreeCamera);
-}
-animate();
+// ══════════════════════════════════════════════
+// リサイズ
+// ══════════════════════════════════════════════
 
 window.addEventListener('resize',()=>{
-  worldCamera.aspect=window.innerWidth/window.innerHeight;worldCamera.updateProjectionMatrix();
-  worldRenderer.setSize(window.innerWidth,window.innerHeight);
-  camThreeCamera.aspect=window.innerWidth/window.innerHeight;camThreeCamera.updateProjectionMatrix();
-  cameraRenderer.setSize(window.innerWidth,window.innerHeight);
-  fxCanvas.width=window.innerWidth;fxCanvas.height=window.innerHeight;
-  rebuildCameraOverlays();
+  cam.aspect = innerWidth/innerHeight;
+  cam.updateProjectionMatrix();
+  ren.setSize(innerWidth, innerHeight);
 });
-// 初期表示はカメラ
-els.worldStage.classList.add('hidden');
-els.cameraStage.classList.remove('hidden');
-startCamera();
-updateHeader();advanceLoading(0);
+
+// ══════════════════════════════════════════════
+// 初回デモ（ページロード時に自動打ち上げ）
+// ══════════════════════════════════════════════
+
+checkPerm();
+
+function autoLaunch(x, wy1, wz, palIdx, delay){
+  setTimeout(()=>{
+    launch(x, wy1, wz, PALETTES[palIdx]);
+    whistle();
+  }, delay);
+}
+
+autoLaunch(-1.4,  4.8, -12, 0, 1100);
+autoLaunch( 1.6,  5.2, -11, 1, 2600);
+autoLaunch(-0.3,  6.0, -13, 4, 4300);
 </script>
 </body>
 </html>
