@@ -56,7 +56,7 @@ canvas{position:fixed;inset:0;z-index:9999;pointer-events:none;}
   <div class="ud-label">打ち上げ中</div>
 </div>
 
-<div class="ver">v7.4</div>
+<div class="ver">v7.5</div>
 <button id="xrbtn" onclick="enterXR()">AR モード ✦</button>
 <div id="perm">
   <div style="font-size:14px;line-height:2;opacity:.85">
@@ -433,39 +433,39 @@ function updateRockets(){
 }
 
 // ══════════════════════════════════════════════
-// 画像花火打ち上げ（メインエントリ）
+// アンカー方式花火打ち上げ（メインエントリ）
+// tap時点のカメラ方向から world 座標を確定し、
+// 以後ジャイロが動いても花火はその場に固定される
 // ══════════════════════════════════════════════
 
-function getCameraVectors(){
+function launchAnchorFirework(){
+  // tap時点のカメラ前方向を取得（以後変更しない）
   const forward = new THREE.Vector3();
   cam.getWorldDirection(forward);
-  const right = new THREE.Vector3();
-  right.crossVectors(forward, cam.up).normalize();
-  const up = new THREE.Vector3();
-  up.crossVectors(right, forward).normalize();
-  return {forward, right, up};
-}
 
-async function launchImageFirework(screenX, screenY){
-  const {forward, right, up} = getCameraVectors();
-  const ndcX = (screenX / innerWidth)  * 2 - 1;
-  const ndcY = -(screenY / innerHeight) * 2 + 1;
+  const worldUp = new THREE.Vector3(0, 1, 0);
 
-  const start = cam.position.clone()
-    .add(forward.clone().multiplyScalar(6))
-    .add(right.clone().multiplyScalar(ndcX * 2.0))
-    .add(up.clone().multiplyScalar(-3.0));
+  // burstAnchor: カメラ前方 10m + 世界上方 3m の空間固定点
+  const burstAnchor = cam.position.clone()
+    .addScaledVector(forward, 10)
+    .addScaledVector(worldUp, 3);
 
-  const end = cam.position.clone()
-    .add(forward.clone().multiplyScalar(10))
-    .add(right.clone().multiplyScalar(ndcX * 2.5))
-    .add(up.clone().multiplyScalar(3.0 + ndcY * 1.0));
+  // launchStart: burstAnchor の 5m 真下
+  const launchStart = burstAnchor.clone()
+    .addScaledVector(worldUp, -5);
 
-  // ロケット即時発射 → 画像サンプリングは並列で行う
-  const camRight = right.clone();
-  const camUp    = up.clone();
+  // 画像成形用ベクトル（tap時点でスナップショット）
+  const snapRight = new THREE.Vector3()
+    .crossVectors(forward, worldUp)
+    .normalize();
+  // カメラが真上/真下向き時のフォールバック
+  if(snapRight.lengthSq() < 0.01) snapRight.set(1, 0, 0);
+  const snapUp = new THREE.Vector3()
+    .crossVectors(snapRight, forward)
+    .normalize();
+
+  // 画像サンプリング（ロケット発射と並列実行）
   let pixels = null;
-
   if(works.length > 0){
     const work = works[Math.floor(Math.random()*works.length)];
     sampleImage(work.url)
@@ -473,11 +473,10 @@ async function launchImageFirework(screenX, screenY){
       .catch(() => {});
   }
 
-  launchVector(start, end, null, (burstPos) => {
+  launchVector(launchStart, burstAnchor, null, burstPos => {
     if(pixels && pixels.length > 0){
-      burstImageParticles(burstPos, pixels, camRight, camUp);
+      burstImageParticles(burstPos, pixels, snapRight, snapUp);
     } else {
-      // 画像未取得ならパレット爆発にフォールバック
       burst(burstPos.x, burstPos.y, burstPos.z,
             PALETTES[Math.floor(Math.random()*PALETTES.length)]);
     }
@@ -486,8 +485,7 @@ async function launchImageFirework(screenX, screenY){
 
 function onTap(e){
   try{ if(audioCtx) audioCtx.resume(); }catch(_){}
-  const touch = e.changedTouches ? e.changedTouches[0] : e;
-  launchImageFirework(touch.clientX, touch.clientY);
+  launchAnchorFirework();
 }
 
 document.addEventListener('touchstart', onTap, {passive:true});
