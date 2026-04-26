@@ -64,7 +64,7 @@ canvas{position:fixed;inset:0;z-index:9999;pointer-events:none;}
 
 <div id="fw-hint">少し上を向いてね ✨</div>
 <div id="pxdbg" style="position:fixed;top:8px;left:10px;z-index:10001;font:10px/1 monospace;color:rgba(255,255,100,.55);pointer-events:none;"></div>
-<div class="ver">v9.2</div>
+<div class="ver">v9.3</div>
 <button id="xrbtn" onclick="enterXR()">AR モード ✦</button>
 <div id="perm">
   <div style="font-size:14px;line-height:2;opacity:.85">
@@ -500,6 +500,32 @@ function makeImageData(url){
         pixels.push(...edgePx.slice(0,950),...interPx.slice(0,450));
         pixels.sort(()=>Math.random()-.5);
         if(pixels.length>1400) pixels.length=1400;
+      } else if(mode==='text_logo'){
+        // エッジ+内部バランス：文字の輪郭＋塗りを均等に埋めて読みやすさ確保
+        const edgePx=[], interPx=[];
+        for(let py=0;py<PSIZ;py++){
+          for(let lpx=0;lpx<PSIZ;lpx++){
+            const i=(py*PSIZ+lpx)*4;
+            if(!isColored(pd[i],pd[i+1],pd[i+2],pd[i+3])) continue;
+            let onEdge=false;
+            outer:for(let ky=-1;ky<=1;ky++){
+              for(let kx=-1;kx<=1;kx++){
+                if(!kx&&!ky) continue;
+                const bx=lpx+kx, by=py+ky;
+                if(bx<0||bx>=PSIZ||by<0||by>=PSIZ){onEdge=true;break outer;}
+                const ni=(by*PSIZ+bx)*4;
+                if(!isColored(pd[ni],pd[ni+1],pd[ni+2],pd[ni+3])){onEdge=true;break outer;}
+              }
+            }
+            const pobj={nx:(lpx/PSIZ)*2-1, ny:(py/PSIZ)*2-1, r:pd[i]/255, g:pd[i+1]/255, b:pd[i+2]/255};
+            if(onEdge) edgePx.push(pobj); else interPx.push(pobj);
+          }
+        }
+        edgePx.sort(()=>Math.random()-.5);
+        interPx.sort(()=>Math.random()-.5);
+        pixels.push(...edgePx.slice(0,1000),...interPx.slice(0,1000));
+        pixels.sort(()=>Math.random()-.5);
+        if(pixels.length>2000) pixels.length=2000;
       } else {
         for(let py=0;py<PSIZ;py+=2){
           for(let lpx=0;lpx<PSIZ;lpx+=2){
@@ -576,12 +602,17 @@ function showImageParticleShape(center, pixels, snapRight, snapUp, mode='illust'
     const ty = center.y + snapRight.y*px.nx*HALF + snapUp.y*(-px.ny)*HALF;
     const tz = center.z + snapRight.z*px.nx*HALF + snapUp.z*(-px.ny)*HALF;
     const dist = Math.sqrt(px.nx*px.nx + px.ny*px.ny);
-    // line_art: extraFrac小→通過速度ゆっくり→爆発0.25秒で形が読める
-    // 到達フレーム = 15.5/(1+extraFrac): line_art→約14f(0.23s), 他→約10-12f(0.17-0.20s)
+    // 到達フレーム=15.5/(1+extraFrac): line_art→14f(0.23s) / text_logo→13f(0.22s) / 他→10-12f(0.17-0.20s)
     const extraFrac = (mode==='line_art')
       ? 0.03 + dist*0.05 + Math.random()*0.05
-      : 0.25 + dist*0.18 + Math.random()*0.20;
-    const [cr,cg,cb] = mapFireworkColor(px.r, px.g, px.b);
+      : (mode==='text_logo')
+        ? 0.05 + dist*0.08 + Math.random()*0.07
+        : 0.25 + dist*0.18 + Math.random()*0.20;
+    let [cr,cg,cb] = mapFireworkColor(px.r, px.g, px.b);
+    // text_logo: 元色を発光補正（夜空で文字色が読める輝度に）
+    if(mode==='text_logo'){
+      cr=Math.min(1,cr*1.20+0.06); cg=Math.min(1,cg*1.20+0.06); cb=Math.min(1,cb*1.20+0.06);
+    }
     addDirP(
       center.x, center.y, center.z,
       tx, ty, tz,
