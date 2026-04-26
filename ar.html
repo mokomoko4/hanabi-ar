@@ -56,7 +56,7 @@ canvas{position:fixed;inset:0;z-index:9999;pointer-events:none;}
   <div class="ud-label">打ち上げ中</div>
 </div>
 
-<div class="ver">v7.5</div>
+<div class="ver">v7.6</div>
 <button id="xrbtn" onclick="enterXR()">AR モード ✦</button>
 <div id="perm">
   <div style="font-size:14px;line-height:2;opacity:.85">
@@ -178,8 +178,15 @@ geo.setAttribute('aC',       new THREE.BufferAttribute(bC,3));
 geo.setAttribute('aA',       new THREE.BufferAttribute(bA,1));
 geo.setAttribute('aS',       new THREE.BufferAttribute(bS,1));
 
+// モバイル判定 + DPR 補正サイズブースト
+const _dpr      = Math.min(window.devicePixelRatio || 1, 3);
+const _isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
+const _sizeBoost = _isMobile ? _dpr * 1.2 : 1.0;
+
 const mat = new THREE.ShaderMaterial({
+  uniforms: { uSizeBoost: { value: _sizeBoost } },
   vertexShader:`
+    uniform float uSizeBoost;
     attribute vec3 aC;
     attribute float aA;
     attribute float aS;
@@ -187,18 +194,23 @@ const mat = new THREE.ShaderMaterial({
     void main(){
       vC=aC; vA=aA;
       vec4 mv=modelViewMatrix*vec4(position,1.);
-      gl_PointSize=aS*(520.0/-mv.z);
+      // 輝度が高い粒子ほど少し大きく（発光感）
+      float lum=dot(aC,vec3(0.299,0.587,0.114));
+      float szMod=0.82+lum*0.36;
+      gl_PointSize=max(6.0, aS*uSizeBoost*szMod*(520.0/-mv.z));
       gl_Position=projectionMatrix*mv;
     }`,
   fragmentShader:`
     varying vec3 vC; varying float vA;
     void main(){
       float d=length(gl_PointCoord-vec2(.5))*2.;
-      float core=1.-smoothstep(.0,.26,d);
-      float halo=1.-smoothstep(.12,1.,d);
-      float a=(core*.92+halo*.26)*vA;
+      float core=1.-smoothstep(.0,.22,d);
+      float glow=1.-smoothstep(.0,.60,d);
+      float halo=1.-smoothstep(.18,1.,d);
+      float a=(core*.95+glow*.32+halo*.16)*vA;
       if(a<.01)discard;
-      gl_FragColor=vec4(clamp(vC*(1.+core*2.6),0.,1.),a);
+      vec3 col=clamp(vC*(1.+core*3.2+glow*0.75),0.,1.);
+      gl_FragColor=vec4(col,a);
     }`,
   transparent:true, blending:THREE.AdditiveBlending,
   depthWrite:false, depthTest:false
@@ -236,7 +248,7 @@ function updateParticles(){
     if(cnt >= MAX) continue;
     bP[cnt*3]=p.x; bP[cnt*3+1]=p.y; bP[cnt*3+2]=p.z;
     bC[cnt*3]=p.r; bC[cnt*3+1]=p.g; bC[cnt*3+2]=p.b;
-    bA[cnt]=p.a;   bS[cnt]=p.s;
+    bA[cnt]=p.a;   bS[cnt]=p.s*(0.45+p.a*0.55); // alpha連動でサイズ縮小
     cnt++;
   }
   for(let j=cnt; j<Math.min(cnt+40,MAX); j++) bA[j]=0;
@@ -265,21 +277,21 @@ const PALETTES = [
 // ══════════════════════════════════════════════
 
 function burst(x, y, z, pal){
-  for(let i=0; i<200; i++){
+  for(let i=0; i<260; i++){
     const theta=Math.random()*Math.PI*2, phi=Math.acos(2*Math.random()-1);
-    const sp=0.038+Math.random()*0.085;
+    const sp=0.040+Math.random()*0.092;
     const zFwd=(Math.random()<0.15)?0.055+Math.random()*0.045:0;
     const c=pal[Math.floor(Math.random()*pal.length)];
     addP(x,y,z,
       Math.sin(phi)*Math.cos(theta)*sp,
       Math.sin(phi)*Math.sin(theta)*sp,
       Math.cos(phi)*sp*0.58+zFwd,
-      c[0],c[1],c[2], 0.004+Math.random()*0.006, 0.26+Math.random()*0.32);
+      c[0],c[1],c[2], 0.004+Math.random()*0.006, 0.44+Math.random()*0.46);
   }
-  for(let i=0; i<14; i++){
+  for(let i=0; i<18; i++){
     addP(x,y,z,
       (Math.random()-.5)*.025,(Math.random()-.5)*.025,(Math.random()-.5)*.025,
-      1,1,1, 0.065+Math.random()*0.055, 0.55+Math.random()*0.6);
+      1,1,1, 0.060+Math.random()*0.050, 0.85+Math.random()*0.75);
   }
   setTimeout(()=>boom(), 55);
 }
@@ -371,15 +383,15 @@ function burstImageParticles(center, pixels, camRight, camUp){
       Math.cos(phi)*sp*0.60 + zFwd,
       px.r, px.g, px.b,
       0.005 + Math.random()*0.007,   // decay: 1.2〜2.0秒で消える
-      0.27  + Math.random()*0.22,    // aS: ~14px at 10m
+      0.46  + Math.random()*0.30,    // aS: 拡大
       HOLD_FRAMES);
   }
 
   // 中心フラッシュ（静止なし）
-  for(let i=0; i<12; i++){
+  for(let i=0; i<16; i++){
     addP(center.x, center.y, center.z,
       (Math.random()-.5)*.028,(Math.random()-.5)*.028,(Math.random()-.5)*.028,
-      1,1,1, 0.06+Math.random()*0.04, 0.55+Math.random()*0.55);
+      1,1,1, 0.055+Math.random()*0.040, 0.85+Math.random()*0.70);
   }
 
   setTimeout(()=>boom(), 55);
@@ -581,30 +593,77 @@ function getAu(){
   if(!audioCtx) audioCtx=new(window.AudioContext||window.webkitAudioContext)();
   audioCtx.resume(); return audioCtx;
 }
+
+// 打ち上げ音：のこぎり波＋サイン倍音で肉厚なヒュー
 function whistle(){
   try{
-    const ctx=getAu(), o=ctx.createOscillator(), g=ctx.createGain();
-    o.connect(g); g.connect(ctx.destination);
-    o.type='sine';
-    o.frequency.setValueAtTime(200,ctx.currentTime);
-    o.frequency.exponentialRampToValueAtTime(2400,ctx.currentTime+1.15);
-    g.gain.setValueAtTime(.038,ctx.currentTime);
-    g.gain.linearRampToValueAtTime(0,ctx.currentTime+1.15);
-    o.start(); o.stop(ctx.currentTime+1.15);
+    const ctx=getAu(), now=ctx.currentTime;
+    const o1=ctx.createOscillator(), g1=ctx.createGain();
+    o1.type='sawtooth';
+    o1.frequency.setValueAtTime(180,now);
+    o1.frequency.exponentialRampToValueAtTime(3200,now+1.1);
+    g1.gain.setValueAtTime(0.022,now);
+    g1.gain.linearRampToValueAtTime(0.040,now+0.65);
+    g1.gain.linearRampToValueAtTime(0,now+1.1);
+    o1.connect(g1); g1.connect(ctx.destination);
+    o1.start(now); o1.stop(now+1.1);
+    // 倍音（高域の艶）
+    const o2=ctx.createOscillator(), g2=ctx.createGain();
+    o2.type='sine';
+    o2.frequency.setValueAtTime(360,now);
+    o2.frequency.exponentialRampToValueAtTime(6400,now+1.1);
+    g2.gain.setValueAtTime(0.012,now);
+    g2.gain.linearRampToValueAtTime(0,now+1.05);
+    o2.connect(g2); g2.connect(ctx.destination);
+    o2.start(now); o2.stop(now+1.1);
   }catch(_){}
 }
-function boom(vol=0.30){
+
+// 爆発音：2層構成（高域パン + 低音ドーン遅延）＋フィードバック残響
+function boom(){
   try{
-    const ctx=getAu(), sr=ctx.sampleRate;
-    const n=Math.floor(sr*.82);
-    const buf=ctx.createBuffer(1,n,sr), d=buf.getChannelData(0);
-    for(let i=0;i<n;i++) d[i]=(Math.random()*2-1)*Math.exp(-i/(n*.10));
-    const src=ctx.createBufferSource(); src.buffer=buf;
-    const g=ctx.createGain();
-    g.gain.setValueAtTime(vol,ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+.82);
-    src.connect(g); g.connect(ctx.destination); src.start();
-    if(vol>.10) setTimeout(()=>boom(vol*.28),290);
+    const ctx=getAu(), sr=ctx.sampleRate, now=ctx.currentTime;
+    const vol=0.30;
+
+    // ── Layer 1: 高域破裂音（即時）──
+    const n1=Math.floor(sr*0.14);
+    const buf1=ctx.createBuffer(1,n1,sr);
+    const d1=buf1.getChannelData(0);
+    for(let i=0;i<n1;i++) d1[i]=(Math.random()*2-1)*Math.exp(-i/(n1*0.055));
+    const src1=ctx.createBufferSource(); src1.buffer=buf1;
+    const hpf=ctx.createBiquadFilter(); hpf.type='highpass'; hpf.frequency.value=700;
+    const g1=ctx.createGain();
+    g1.gain.setValueAtTime(vol*1.2,now);
+    g1.gain.exponentialRampToValueAtTime(0.001,now+0.14);
+    src1.connect(hpf); hpf.connect(g1); g1.connect(ctx.destination);
+    src1.start(now);
+
+    // ── Layer 2: 低音ドーン（0.14〜0.21秒後）──
+    const d2st=now+0.14+Math.random()*0.07;
+    const n2=Math.floor(sr*2.0);
+    const buf2=ctx.createBuffer(1,n2,sr);
+    const d2=buf2.getChannelData(0);
+    for(let i=0;i<n2;i++) d2[i]=(Math.random()*2-1)*Math.exp(-i/(n2*0.20));
+    const src2=ctx.createBufferSource(); src2.buffer=buf2;
+    const lpf=ctx.createBiquadFilter(); lpf.type='lowpass'; lpf.frequency.value=200; lpf.Q.value=1.5;
+    // ソフトクリッピングで腹に響く歪み
+    const ws=ctx.createWaveShaper();
+    const wc=new Float32Array(256);
+    for(let i=0;i<256;i++){const x=(i*2/255)-1; wc[i]=(3*x)/(2*(1+Math.abs(2.2*x)));}
+    ws.curve=wc; ws.oversample='2x';
+    const g2=ctx.createGain();
+    g2.gain.setValueAtTime(0.001,d2st);
+    g2.gain.linearRampToValueAtTime(vol*0.88,d2st+0.06);
+    g2.gain.exponentialRampToValueAtTime(0.001,d2st+1.9);
+    // フィードバック残響（ループ遅延）
+    const dly=ctx.createDelay(0.5); dly.delayTime.value=0.058;
+    const fb=ctx.createGain(); fb.gain.value=0.24;
+    const rv=ctx.createGain(); rv.gain.value=0.20;
+    src2.connect(lpf); lpf.connect(ws); ws.connect(g2);
+    g2.connect(ctx.destination);
+    g2.connect(dly); dly.connect(fb); fb.connect(dly); // 残響ループ
+    fb.connect(rv); rv.connect(ctx.destination);
+    src2.start(d2st);
   }catch(_){}
 }
 
