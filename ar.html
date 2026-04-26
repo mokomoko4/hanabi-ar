@@ -64,7 +64,7 @@ canvas{position:fixed;inset:0;z-index:9999;pointer-events:none;}
 
 <div id="fw-hint">少し上を向いてね ✨</div>
 <div id="pxdbg" style="position:fixed;top:8px;left:10px;z-index:10001;font:10px/1 monospace;color:rgba(255,255,100,.55);pointer-events:none;"></div>
-<div class="ver">v9.1</div>
+<div class="ver">v9.2</div>
 <button id="xrbtn" onclick="enterXR()">AR モード ✦</button>
 <div id="perm">
   <div style="font-size:14px;line-height:2;opacity:.85">
@@ -410,7 +410,7 @@ function makeImageData(url){
         mode='photo_landscape';
       } else if(colorVariety<48&&edgeDensity>0.06&&coloredRatio>0.04&&coloredRatio<0.60){
         mode='text_logo';
-      } else if(coloredRatio<0.20){
+      } else if(coloredRatio<0.25){
         mode='line_art';
       } else {
         mode='illust';
@@ -471,17 +471,46 @@ function makeImageData(url){
         pd=d0;
       }
 
-      // ── ピクセルサンプリング（step=2）───────────────
+      // ── ピクセルサンプリング ─────────────────────────
       const pixels=[];
-      for(let py=0;py<PSIZ;py+=2){
-        for(let px=0;px<PSIZ;px+=2){
-          const i=(py*PSIZ+px)*4;
-          const r=pd[i],g=pd[i+1],b=pd[i+2],a=pd[i+3];
-          if(!isColored(r,g,b,a)) continue;
-          pixels.push({nx:(px/PSIZ)*2-1, ny:(py/PSIZ)*2-1, r:r/255, g:g/255, b:b/255});
+      if(mode==='line_art'){
+        // エッジ優先：線の輪郭画素(step=1全数) + 内部画素(step=2間引き)
+        const edgePx=[], interPx=[];
+        for(let py=0;py<PSIZ;py++){
+          for(let lpx=0;lpx<PSIZ;lpx++){
+            const i=(py*PSIZ+lpx)*4;
+            if(!isColored(pd[i],pd[i+1],pd[i+2],pd[i+3])) continue;
+            let onEdge=false;
+            outer:for(let ky=-1;ky<=1;ky++){
+              for(let kx=-1;kx<=1;kx++){
+                if(!kx&&!ky) continue;
+                const bx=lpx+kx, by=py+ky;
+                if(bx<0||bx>=PSIZ||by<0||by>=PSIZ){onEdge=true;break outer;}
+                const ni=(by*PSIZ+bx)*4;
+                if(!isColored(pd[ni],pd[ni+1],pd[ni+2],pd[ni+3])){onEdge=true;break outer;}
+              }
+            }
+            const pobj={nx:(lpx/PSIZ)*2-1, ny:(py/PSIZ)*2-1, r:pd[i]/255, g:pd[i+1]/255, b:pd[i+2]/255};
+            if(onEdge) edgePx.push(pobj);
+            else if((py&1)===0&&(lpx&1)===0) interPx.push(pobj);
+          }
         }
+        edgePx.sort(()=>Math.random()-.5);
+        interPx.sort(()=>Math.random()-.5);
+        pixels.push(...edgePx.slice(0,950),...interPx.slice(0,450));
+        pixels.sort(()=>Math.random()-.5);
+        if(pixels.length>1400) pixels.length=1400;
+      } else {
+        for(let py=0;py<PSIZ;py+=2){
+          for(let lpx=0;lpx<PSIZ;lpx+=2){
+            const i=(py*PSIZ+lpx)*4;
+            const r=pd[i],g=pd[i+1],b=pd[i+2],a=pd[i+3];
+            if(!isColored(r,g,b,a)) continue;
+            pixels.push({nx:(lpx/PSIZ)*2-1, ny:(py/PSIZ)*2-1, r:r/255, g:g/255, b:b/255});
+          }
+        }
+        if(pixels.length>1400){pixels.sort(()=>Math.random()-.5); pixels.length=1400;}
       }
-      if(pixels.length>1400){pixels.sort(()=>Math.random()-.5); pixels.length=1400;}
 
       // デバッグ表示
       const dbg=document.getElementById('pxdbg');
@@ -540,16 +569,18 @@ function addCenterGlow(x, y, z){
 
 function showImageParticleShape(center, pixels, snapRight, snapUp, mode='illust'){
   const HALF = SHAPE_SCALE * 0.5;
-  const szB  = (mode==='line_art'||mode==='text_logo') ? 1.4 : (mode==='photo_landscape'||mode==='face_portrait') ? 0.85 : 1.0;
+  const szB  = (mode==='line_art') ? 1.5 : (mode==='text_logo') ? 1.4 : (mode==='photo_landscape'||mode==='face_portrait') ? 0.85 : 1.0;
   for(const px of pixels){
     // target = 画像ピクセルのワールド座標（通過点）
     const tx = center.x + snapRight.x*px.nx*HALF + snapUp.x*(-px.ny)*HALF;
     const ty = center.y + snapRight.y*px.nx*HALF + snapUp.y*(-px.ny)*HALF;
     const tz = center.z + snapRight.z*px.nx*HALF + snapUp.z*(-px.ny)*HALF;
     const dist = Math.sqrt(px.nx*px.nx + px.ny*px.ny);
-    // 乗算 extraFrac：内外ともに (18/(1+extraFrac)) フレームで target を通過
-    // → 全粒子がほぼ同タイミングで形状を形成し、そのまま外へ抜ける
-    const extraFrac = 0.25 + dist*0.18 + Math.random()*0.20;
+    // line_art: extraFrac小→通過速度ゆっくり→爆発0.25秒で形が読める
+    // 到達フレーム = 15.5/(1+extraFrac): line_art→約14f(0.23s), 他→約10-12f(0.17-0.20s)
+    const extraFrac = (mode==='line_art')
+      ? 0.03 + dist*0.05 + Math.random()*0.05
+      : 0.25 + dist*0.18 + Math.random()*0.20;
     const [cr,cg,cb] = mapFireworkColor(px.r, px.g, px.b);
     addDirP(
       center.x, center.y, center.z,
