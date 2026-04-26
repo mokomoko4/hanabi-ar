@@ -63,7 +63,7 @@ canvas{position:fixed;inset:0;z-index:9999;pointer-events:none;}
 </div>
 
 <div id="fw-hint">少し上を向いてね ✨</div>
-<div class="ver">v8.8</div>
+<div class="ver">v8.9</div>
 <button id="xrbtn" onclick="enterXR()">AR モード ✦</button>
 <div id="perm">
   <div style="font-size:14px;line-height:2;opacity:.85">
@@ -278,7 +278,7 @@ function updateParticles(){
     if(cnt >= MAX) continue;
     bP[cnt*3]=p.x; bP[cnt*3+1]=p.y; bP[cnt*3+2]=p.z;
     bC[cnt*3]=p.r; bC[cnt*3+1]=p.g; bC[cnt*3+2]=p.b;
-    bA[cnt]=p.a;   bS[cnt]=p.s*Math.max(0.38, 0.38 + p.a*0.67);
+    bA[cnt]=p.a;   bS[cnt]=p.s*(0.75 + p.a*0.25); // alpha優先で消える・サイズは75〜100%に維持
     cnt++;
   }
   for(let j=cnt; j<Math.min(cnt+40,MAX); j++) bA[j]=0;
@@ -701,28 +701,53 @@ function getAu(){
   audioCtx.resume(); return audioCtx;
 }
 
-// 打ち上げ音：のこぎり波＋サイン倍音で肉厚なヒュー
+// 打ち上げ音：3層構成（笛音 + 噴射ノイズ + 低音推進）
 function whistle(){
   try{
     const ctx=getAu(), now=ctx.currentTime;
+    const dur=1.15;
+
+    // Layer 1: 笛音 triangle 350→1200Hz（ヒューーーッ）
     const o1=ctx.createOscillator(), g1=ctx.createGain();
-    o1.type='sawtooth';
-    o1.frequency.setValueAtTime(180,now);
-    o1.frequency.exponentialRampToValueAtTime(3200,now+1.1);
-    g1.gain.setValueAtTime(0.022,now);
-    g1.gain.linearRampToValueAtTime(0.040,now+0.65);
-    g1.gain.linearRampToValueAtTime(0,now+1.1);
+    o1.type='triangle';
+    o1.frequency.setValueAtTime(350,now);
+    o1.frequency.exponentialRampToValueAtTime(1200,now+dur);
+    g1.gain.setValueAtTime(0.001,now);
+    g1.gain.exponentialRampToValueAtTime(0.14,now+0.08);
+    g1.gain.exponentialRampToValueAtTime(0.22,now+dur*0.85);
+    g1.gain.exponentialRampToValueAtTime(0.001,now+dur);
     o1.connect(g1); g1.connect(ctx.destination);
-    o1.start(now); o1.stop(now+1.1);
-    // 倍音（高域の艶）
-    const o2=ctx.createOscillator(), g2=ctx.createGain();
-    o2.type='sine';
-    o2.frequency.setValueAtTime(360,now);
-    o2.frequency.exponentialRampToValueAtTime(6400,now+1.1);
-    g2.gain.setValueAtTime(0.012,now);
-    g2.gain.linearRampToValueAtTime(0,now+1.05);
-    o2.connect(g2); g2.connect(ctx.destination);
-    o2.start(now); o2.stop(now+1.1);
+    o1.start(now); o1.stop(now+dur);
+
+    // Layer 2: 噴射ノイズ bandpass 900→2200Hz（シューーー）
+    const sr=ctx.sampleRate;
+    const nLen=Math.floor(sr*dur);
+    const nBuf=ctx.createBuffer(1,nLen,sr);
+    const nd=nBuf.getChannelData(0);
+    for(let i=0;i<nLen;i++) nd[i]=Math.random()*2-1;
+    const nSrc=ctx.createBufferSource(); nSrc.buffer=nBuf;
+    const bpf=ctx.createBiquadFilter(); bpf.type='bandpass';
+    bpf.frequency.setValueAtTime(900,now);
+    bpf.frequency.exponentialRampToValueAtTime(2200,now+dur);
+    bpf.Q.value=0.8;
+    const g2=ctx.createGain();
+    g2.gain.setValueAtTime(0.001,now);
+    g2.gain.exponentialRampToValueAtTime(0.10,now+0.05);
+    g2.gain.exponentialRampToValueAtTime(0.18,now+dur*0.8);
+    g2.gain.exponentialRampToValueAtTime(0.001,now+dur);
+    nSrc.connect(bpf); bpf.connect(g2); g2.connect(ctx.destination);
+    nSrc.start(now); nSrc.stop(now+dur);
+
+    // Layer 3: 低音推進 sawtooth 90→140Hz（ゴォーッ）
+    const o3=ctx.createOscillator(), g3=ctx.createGain();
+    o3.type='sawtooth';
+    o3.frequency.setValueAtTime(90,now);
+    o3.frequency.linearRampToValueAtTime(140,now+dur);
+    g3.gain.setValueAtTime(0.001,now);
+    g3.gain.exponentialRampToValueAtTime(0.042,now+0.05);
+    g3.gain.exponentialRampToValueAtTime(0.001,now+dur);
+    o3.connect(g3); g3.connect(ctx.destination);
+    o3.start(now); o3.stop(now+dur);
   }catch(_){}
 }
 
