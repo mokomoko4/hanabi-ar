@@ -63,7 +63,7 @@ canvas{position:fixed;inset:0;z-index:9999;pointer-events:none;}
 </div>
 
 <div id="fw-hint">少し上を向いてね ✨</div>
-<div class="ver">v8.6</div>
+<div class="ver">v8.7</div>
 <button id="xrbtn" onclick="enterXR()">AR モード ✦</button>
 <div id="perm">
   <div style="font-size:14px;line-height:2;opacity:.85">
@@ -513,6 +513,8 @@ function updateRockets(){
 // 以後ジャイロが動いても花火はその場に固定される
 // ══════════════════════════════════════════════
 
+let _workIndex = 0;
+
 function launchAnchorFirework(){
   const forward = new THREE.Vector3();
   cam.getWorldDirection(forward);
@@ -530,10 +532,11 @@ function launchAnchorFirework(){
   const snapUp = new THREE.Vector3()
     .crossVectors(snapRight, forward).normalize();
 
-  // 画像読み込み（ロケット発射と並列）
+  // 画像読み込み（ロケット発射と並列）- 作品を順番に1枚ずつ使用
   let imageData = null;
   if(works.length > 0){
-    const work = works[Math.floor(Math.random()*works.length)];
+    const work = works[_workIndex % works.length];
+    _workIndex++;
     makeImageData(work.url)
       .then(d => { imageData = d; })
       .catch(() => {});
@@ -567,13 +570,20 @@ function showFireworkHint(){
   _hintTimer = setTimeout(()=>{ el.style.opacity = '0'; }, 2600);
 }
 
+// touchstart + click の両方が来てもタップ1回 = 発射1回にする
+let _lastTapMs = 0;
 function onTap(e){
+  const now = Date.now();
+  if(now - _lastTapMs < 500) return; // 500ms 以内の重複イベントを無視
+  _lastTapMs = now;
   try{ if(audioCtx) audioCtx.resume(); }catch(_){}
   launchAnchorFirework();
   showFireworkHint();
 }
 
+// touchstart のみ登録（click は touchstart の後に合成されるため重複する）
 document.addEventListener('touchstart', onTap, {passive:true});
+// PC/デスクトップ向けに click も残すが、touchstart 後は 500ms ガードで無視される
 document.addEventListener('click', onTap);
 
 // ══════════════════════════════════════════════
