@@ -56,7 +56,7 @@ canvas{position:fixed;inset:0;z-index:9999;pointer-events:none;}
   <div class="ud-label">打ち上げ中</div>
 </div>
 
-<div class="ver">v7.6</div>
+<div class="ver">v7.7</div>
 <button id="xrbtn" onclick="enterXR()">AR モード ✦</button>
 <div id="perm">
   <div style="font-size:14px;line-height:2;opacity:.85">
@@ -297,104 +297,152 @@ function burst(x, y, z, pal){
 }
 
 // ══════════════════════════════════════════════
-// 画像サンプリング
+// 画像データ取得（表示用テクスチャ + 散布用ピクセル）
 // ══════════════════════════════════════════════
 
-function sampleImage(url){
+function makeImageData(url){
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
-      const SIZE = 64;
-      const cv2 = document.createElement('canvas');
-      cv2.width = cv2.height = SIZE;
-      const ctx = cv2.getContext('2d');
-      // アスペクト比を維持して中央配置
       const ar = img.width / img.height;
-      let dw = SIZE, dh = SIZE;
-      if(ar > 1) dh = SIZE / ar; else dw = SIZE * ar;
-      ctx.drawImage(img, (SIZE-dw)/2, (SIZE-dh)/2, dw, dh);
 
-      const data = ctx.getImageData(0, 0, SIZE, SIZE).data;
+      // ── 散布用ピクセルサンプリング（低解像度）──
+      const PSIZ = 64;
+      const pc = document.createElement('canvas');
+      pc.width = pc.height = PSIZ;
+      const pctx = pc.getContext('2d');
+      let dw=PSIZ, dh=PSIZ;
+      if(ar>1) dh=PSIZ/ar; else dw=PSIZ*ar;
+      pctx.drawImage(img,(PSIZ-dw)/2,(PSIZ-dh)/2,dw,dh);
+      const pd = pctx.getImageData(0,0,PSIZ,PSIZ).data;
       const pixels = [];
-      const STEP = 4;
-      for(let py = 0; py < SIZE; py += STEP){
-        for(let px = 0; px < SIZE; px += STEP){
-          const i = (py * SIZE + px) * 4;
-          const r=data[i], g=data[i+1], b=data[i+2], a=data[i+3];
-          if(a < 30) continue;               // 透明
-          if(r>220 && g>220 && b>220) continue; // 白背景
-          if(r<15 && g<15 && b<15) continue;  // 黒すぎ
-          pixels.push({
-            nx: (px / SIZE) * 2 - 1,         // -1..1 (left→right)
-            ny: (py / SIZE) * 2 - 1,         // -1..1 (top→bottom)
-            r: r/255, g: g/255, b: b/255
-          });
+      for(let py=0; py<PSIZ; py+=4){
+        for(let px=0; px<PSIZ; px+=4){
+          const i=(py*PSIZ+px)*4;
+          const r=pd[i],g=pd[i+1],b=pd[i+2],a=pd[i+3];
+          if(a<30||r<15&&g<15&&b<15) continue;
+          if(r>220&&g>220&&b>220) continue;
+          pixels.push({ nx:(px/PSIZ)*2-1, ny:(py/PSIZ)*2-1, r:r/255, g:g/255, b:b/255 });
         }
       }
-      // 最大 280 粒
-      if(pixels.length > 280){
-        pixels.sort(()=>Math.random()-.5);
-        pixels.length = 280;
+      if(pixels.length>300){ pixels.sort(()=>Math.random()-.5); pixels.length=300; }
+
+      // ── 表示用テクスチャ（高解像度・白背景除去）──
+      const TSIZ = 256;
+      const tc = document.createElement('canvas');
+      tc.width = tc.height = TSIZ;
+      const tctx = tc.getContext('2d');
+      let tdw=TSIZ, tdh=TSIZ;
+      if(ar>1) tdh=TSIZ/ar; else tdw=TSIZ*ar;
+      tctx.drawImage(img,(TSIZ-tdw)/2,(TSIZ-tdh)/2,tdw,tdh);
+      const td = tctx.getImageData(0,0,TSIZ,TSIZ);
+      for(let i=0; i<td.data.length; i+=4){
+        const r=td.data[i],g=td.data[i+1],b=td.data[i+2];
+        const brightness=(r+g+b)/3;
+        const saturation=Math.max(r,g,b)-Math.min(r,g,b);
+        if(brightness>215 && saturation<28) td.data[i+3]=0; // 白/薄いグレー除去
       }
-      resolve(pixels);
+      tctx.putImageData(td,0,0);
+
+      resolve({ texture: new THREE.CanvasTexture(tc), pixels });
     };
-    img.onerror = () => reject(new Error('image load failed'));
+    img.onerror = reject;
     img.src = url;
   });
 }
 
 // ══════════════════════════════════════════════
-// 画像花火爆発
-// pixels   : [{nx,ny,r,g,b}]  (正規化 -1..1)
-// center   : THREE.Vector3    (爆発中心)
-// camRight : THREE.Vector3    (カメラ右方向)
-// camUp    : THREE.Vector3    (カメラ上方向)
+// 画像カード（空中表示 → 粒子化）
+// 演出: fadeIn(0.13s) → hold(1s) → fadeOut(0.43s) + 粒子散布
 // ══════════════════════════════════════════════
 
-const HOLD_FRAMES = 14;   // 約0.23秒 image shape 静止
-const IMG_SCALE   = 1.8;  // ワールド幅 [m]
+const CARD_SIZE    = 4.5;  // 世界座標での幅 [m]
+const CARD_FADEIN  = 8;    // フェードインフレーム数
+const CARD_HOLD    = 62;   // 静止フレーム数（~1秒）
+const CARD_FADEOUT = 26;   // フェードアウトフレーム数
 
-function burstImageParticles(center, pixels, camRight, camUp){
-  for(const px of pixels){
-    // 画像形状の位置（カメラ正面を向いた平面 + Z方向に薄いランダム厚み）
-    const wx = center.x
-      + camRight.x * px.nx * IMG_SCALE
-      + camUp.x    * (-px.ny) * IMG_SCALE   // 画像Y軸は下向きなので反転
-      + (Math.random()-.5)*.1;
-    const wy = center.y
-      + camRight.y * px.nx * IMG_SCALE
-      + camUp.y    * (-px.ny) * IMG_SCALE
-      + (Math.random()-.5)*.1;
-    const wz = center.z
-      + camRight.z * px.nx * IMG_SCALE
-      + camUp.z    * (-px.ny) * IMG_SCALE
-      + (Math.random()-.5)*.35;
+const imageCards = [];
 
-    // 爆発速度（球状ランダム）
-    const theta = Math.random()*Math.PI*2;
-    const phi   = Math.acos(2*Math.random()-1);
-    const sp    = 0.032 + Math.random()*0.072;
-    const zFwd  = (Math.random() < 0.20) ? 0.04 + Math.random()*0.04 : 0;
+function createImageCard(texture, pos, snapRight, snapUp){
+  const geo = new THREE.PlaneGeometry(CARD_SIZE, CARD_SIZE);
 
-    addP(wx, wy, wz,
+  // メインプレーン（実画像）
+  const mat = new THREE.MeshBasicMaterial({
+    map:texture, transparent:true, opacity:0,
+    side:THREE.DoubleSide, depthWrite:false
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.copy(pos);
+  mesh.up.copy(snapUp);
+  mesh.lookAt(new THREE.Vector3(0,0,0)); // カメラ（原点）の方を向く
+  scene.add(mesh);
+
+  // グロープレーン（少し大きめ・加算合成）
+  const gmat = new THREE.MeshBasicMaterial({
+    map:texture, transparent:true, opacity:0,
+    side:THREE.DoubleSide, depthWrite:false,
+    blending:THREE.AdditiveBlending
+  });
+  const glow = new THREE.Mesh(geo, gmat);
+  glow.position.copy(pos);
+  glow.up.copy(snapUp);
+  glow.lookAt(new THREE.Vector3(0,0,0));
+  glow.scale.setScalar(1.16);
+  scene.add(glow);
+
+  return { mesh, glow, geo, mat, gmat, texture,
+           state:'fadeIn', timer:0,
+           pixels:null, pos:pos.clone(),
+           snapRight:snapRight.clone(), snapUp:snapUp.clone(),
+           particlesSpawned:false };
+}
+
+function spawnCardParticles(card){
+  if(card.particlesSpawned || !card.pixels) return;
+  card.particlesSpawned = true;
+  const sr=card.snapRight, su=card.snapUp, p=card.pos;
+  const HALF = CARD_SIZE * 0.5;
+  for(const px of card.pixels){
+    // ワールド座標に展開（画像Y軸は下向きなので -ny）
+    const wx = p.x + sr.x*px.nx*HALF + su.x*(-px.ny)*HALF;
+    const wy = p.y + sr.y*px.nx*HALF + su.y*(-px.ny)*HALF;
+    const wz = p.z + sr.z*px.nx*HALF + su.z*(-px.ny)*HALF;
+    const theta=Math.random()*Math.PI*2, phi=Math.acos(2*Math.random()-1);
+    const sp=0.022+Math.random()*0.058;
+    const zFwd=(Math.random()<0.40)?0.028+Math.random()*0.048:0;
+    addP(wx,wy,wz,
       Math.sin(phi)*Math.cos(theta)*sp,
-      Math.sin(phi)*Math.sin(theta)*sp,
-      Math.cos(phi)*sp*0.60 + zFwd,
+      Math.sin(phi)*Math.sin(theta)*sp+0.006,
+      Math.cos(phi)*sp*0.55+zFwd,
       px.r, px.g, px.b,
-      0.005 + Math.random()*0.007,   // decay: 1.2〜2.0秒で消える
-      0.46  + Math.random()*0.30,    // aS: 拡大
-      HOLD_FRAMES);
+      0.006+Math.random()*0.008, 0.52+Math.random()*0.38);
   }
+}
 
-  // 中心フラッシュ（静止なし）
-  for(let i=0; i<16; i++){
-    addP(center.x, center.y, center.z,
-      (Math.random()-.5)*.028,(Math.random()-.5)*.028,(Math.random()-.5)*.028,
-      1,1,1, 0.055+Math.random()*0.040, 0.85+Math.random()*0.70);
+function updateImageCards(){
+  for(let i=imageCards.length-1; i>=0; i--){
+    const c = imageCards[i];
+    c.timer++;
+    if(c.state==='fadeIn'){
+      const t = Math.min(1, c.timer/CARD_FADEIN);
+      c.mat.opacity  = t * 0.96;
+      c.gmat.opacity = t * 0.45;
+      if(c.timer >= CARD_FADEIN){ c.state='hold'; c.timer=0; }
+    } else if(c.state==='hold'){
+      if(c.timer >= CARD_HOLD){ c.state='fadeOut'; c.timer=0; }
+    } else if(c.state==='fadeOut'){
+      if(c.timer===1) spawnCardParticles(c);
+      const t = 1 - Math.min(1, c.timer/CARD_FADEOUT);
+      c.mat.opacity  = t * 0.96;
+      c.gmat.opacity = t * 0.45;
+      if(c.timer >= CARD_FADEOUT){ c.state='done'; }
+    } else {
+      scene.remove(c.mesh); scene.remove(c.glow);
+      c.mat.dispose(); c.gmat.dispose(); c.geo.dispose(); c.texture.dispose();
+      imageCards.splice(i,1);
+    }
   }
-
-  setTimeout(()=>boom(), 55);
 }
 
 // ══════════════════════════════════════════════
@@ -451,44 +499,47 @@ function updateRockets(){
 // ══════════════════════════════════════════════
 
 function launchAnchorFirework(){
-  // tap時点のカメラ前方向を取得（以後変更しない）
   const forward = new THREE.Vector3();
   cam.getWorldDirection(forward);
-
   const worldUp = new THREE.Vector3(0, 1, 0);
 
-  // burstAnchor: カメラ前方 10m + 世界上方 3m の空間固定点
   const burstAnchor = cam.position.clone()
     .addScaledVector(forward, 10)
     .addScaledVector(worldUp, 3);
-
-  // launchStart: burstAnchor の 5m 真下
   const launchStart = burstAnchor.clone()
     .addScaledVector(worldUp, -5);
 
-  // 画像成形用ベクトル（tap時点でスナップショット）
   const snapRight = new THREE.Vector3()
-    .crossVectors(forward, worldUp)
-    .normalize();
-  // カメラが真上/真下向き時のフォールバック
-  if(snapRight.lengthSq() < 0.01) snapRight.set(1, 0, 0);
+    .crossVectors(forward, worldUp).normalize();
+  if(snapRight.lengthSq() < 0.01) snapRight.set(1,0,0);
   const snapUp = new THREE.Vector3()
-    .crossVectors(snapRight, forward)
-    .normalize();
+    .crossVectors(snapRight, forward).normalize();
 
-  // 画像サンプリング（ロケット発射と並列実行）
-  let pixels = null;
+  // 画像読み込み（ロケット発射と並列）
+  let imageData = null;
   if(works.length > 0){
     const work = works[Math.floor(Math.random()*works.length)];
-    sampleImage(work.url)
-      .then(px => { pixels = px; })
+    makeImageData(work.url)
+      .then(d => { imageData = d; })
       .catch(() => {});
   }
 
   launchVector(launchStart, burstAnchor, null, burstPos => {
-    if(pixels && pixels.length > 0){
-      burstImageParticles(burstPos, pixels, snapRight, snapUp);
+    // 爆発フラッシュ粒子（即時）
+    for(let i=0;i<18;i++){
+      addP(burstPos.x,burstPos.y,burstPos.z,
+        (Math.random()-.5)*.045,(Math.random()-.5)*.045,(Math.random()-.5)*.045,
+        1,1,1, 0.050+Math.random()*0.045, 0.90+Math.random()*0.75);
+    }
+    setTimeout(()=>boom(), 55);
+
+    if(imageData){
+      // 画像カード表示 → 1秒後に粒子化
+      const card = createImageCard(imageData.texture, burstPos, snapRight, snapUp);
+      card.pixels = imageData.pixels;
+      imageCards.push(card);
     } else {
+      // 画像未取得: パレット花火にフォールバック
       burst(burstPos.x, burstPos.y, burstPos.z,
             PALETTES[Math.floor(Math.random()*PALETTES.length)]);
     }
@@ -676,6 +727,7 @@ function tick(){
   updateRockets();
   updateArrowIndicator();
   updateParticles();
+  updateImageCards();
 }
 
 function animate(){
