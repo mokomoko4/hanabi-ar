@@ -56,7 +56,7 @@ canvas{position:fixed;inset:0;z-index:9999;pointer-events:none;}
   <div class="ud-label">打ち上げ中</div>
 </div>
 
-<div class="ver">v7.8</div>
+<div class="ver">v7.8a</div>
 <button id="xrbtn" onclick="enterXR()">AR モード ✦</button>
 <div id="perm">
   <div style="font-size:14px;line-height:2;opacity:.85">
@@ -341,7 +341,14 @@ function makeImageData(url){
         const r=td.data[i],g=td.data[i+1],b=td.data[i+2];
         const brightness=(r+g+b)/3;
         const saturation=Math.max(r,g,b)-Math.min(r,g,b);
-        if(brightness>215 && saturation<28) td.data[i+3]=0; // 白/薄いグレー除去
+        // brightness 180〜240 をグラデーション除去（アンチエイリアス縁も溶かす）
+        // 彩度が高い色（絵の内側）は保護
+        if(brightness > 180){
+          const whiteness  = Math.min(1,(brightness-180)/60);
+          const colorKeep  = Math.min(1,saturation/35)*0.45;
+          const keepAlpha  = Math.max(0, 1 - whiteness*(1-colorKeep));
+          td.data[i+3] = Math.round(td.data[i+3]*keepAlpha);
+        }
       }
       tctx.putImageData(td,0,0);
 
