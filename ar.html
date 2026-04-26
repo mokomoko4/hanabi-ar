@@ -64,7 +64,7 @@ canvas{position:fixed;inset:0;z-index:9999;pointer-events:none;}
 
 <div id="fw-hint">少し上を向いてね ✨</div>
 <div id="pxdbg" style="position:fixed;top:8px;left:10px;z-index:10001;font:10px/1 monospace;color:rgba(255,255,100,.55);pointer-events:none;"></div>
-<div class="ver">v8.9c</div>
+<div class="ver">v9.0</div>
 <button id="xrbtn" onclick="enterXR()">AR モード ✦</button>
 <div id="perm">
   <div style="font-size:14px;line-height:2;opacity:.85">
@@ -370,11 +370,53 @@ function makeImageData(url){
       for(let i=0;i<d0.length;i+=4){
         if(isColored(d0[i],d0[i+1],d0[i+2],d0[i+3])) coloredCount++;
       }
-      const isLineArt = (coloredCount/(PSIZ*PSIZ)) < 0.18;
+      const coloredRatio = coloredCount/(PSIZ*PSIZ);
+      const isLineArt = coloredRatio < 0.18;
 
-      // 線画のみ: 円形 dilation（半径3）で線を太らせる
-      let pd = d0;
-      if(isLineArt){
+      // 色多様性で写真判定（4bitグリッドでユニーク色数を計測）
+      let colorVariety = 0;
+      if(!isLineArt){
+        const cset = new Set();
+        for(let i=0;i<d0.length;i+=4*6){
+          if(d0[i+3]<15) continue;
+          cset.add(((d0[i]>>4)<<8)|((d0[i+1]>>4)<<4)|(d0[i+2]>>4));
+        }
+        colorVariety = cset.size;
+      }
+      // 写真判定：有色率高い + 色数多い = イラスト・絵ではなく写真系
+      const isPhoto = !isLineArt && coloredRatio > 0.45 && colorVariety > 90;
+
+      // モード別前処理
+      let pd;
+      if(isPhoto){
+        // 写真モード：posterize(5段階) → 上位8色の領域だけ残す
+        const PSTEP = Math.floor(256/5);
+        const post = v => Math.floor(v/PSTEP)*PSTEP + Math.floor(PSTEP/2);
+        const cmap = new Map();
+        for(let y=0;y<PSIZ;y++){
+          for(let x=0;x<PSIZ;x++){
+            const i=(y*PSIZ+x)*4;
+            if(d0[i+3]<15) continue;
+            const r=post(d0[i]),g=post(d0[i+1]),b=post(d0[i+2]);
+            if(r>245&&g>245&&b>245) continue;
+            const key=(r<<16)|(g<<8)|b;
+            cmap.set(key,(cmap.get(key)||0)+1);
+          }
+        }
+        const topColors = new Set(
+          [...cmap.entries()].sort((a,b)=>b[1]-a[1]).slice(0,8).map(([k])=>k)
+        );
+        const pout = new Uint8ClampedArray(d0.length);
+        for(let i=0;i<d0.length;i+=4){
+          const r=post(d0[i]),g=post(d0[i+1]),b=post(d0[i+2]),a=d0[i+3];
+          if(a<15||(r>245&&g>245&&b>245)){pout[i+3]=0;continue;}
+          const key=(r<<16)|(g<<8)|b;
+          if(topColors.has(key)){pout[i]=r;pout[i+1]=g;pout[i+2]=b;pout[i+3]=a;}
+          else{pout[i+3]=0;}
+        }
+        pd = pout;
+      } else if(isLineArt){
+        // 線画モード：円形 dilation（半径3）で線を太らせる
         const R=3, out=new Uint8ClampedArray(d0);
         for(let y=0;y<PSIZ;y++){
           for(let x=0;x<PSIZ;x++){
@@ -383,19 +425,19 @@ function makeImageData(url){
             for(let dy=-R;dy<=R;dy++){
               for(let dx=-R;dx<=R;dx++){
                 if(dx*dx+dy*dy>R*R) continue;
-                const nx=x+dx, ny=y+dy;
+                const nx=x+dx,ny=y+dy;
                 if(nx<0||nx>=PSIZ||ny<0||ny>=PSIZ) continue;
                 const ni=(ny*PSIZ+nx)*4;
-                // 隣が背景のときだけ塗る（既存の有色ピクセルは保護）
                 if(!isColored(d0[ni],d0[ni+1],d0[ni+2],d0[ni+3])){
-                  out[ni]=d0[si]; out[ni+1]=d0[si+1];
-                  out[ni+2]=d0[si+2]; out[ni+3]=d0[si+3];
+                  out[ni]=d0[si];out[ni+1]=d0[si+1];out[ni+2]=d0[si+2];out[ni+3]=d0[si+3];
                 }
               }
             }
           }
         }
         pd = out;
+      } else {
+        pd = d0;
       }
 
       // ピクセルサンプリング（step=2）
@@ -412,9 +454,10 @@ function makeImageData(url){
 
       // デバッグ表示
       const dbg=document.getElementById('pxdbg');
-      if(dbg) dbg.textContent=`pixels: ${pixels.length} / lineArt: ${isLineArt}`;
+      const mode=isPhoto?'photo':isLineArt?'lineArt':'illust';
+      if(dbg) dbg.textContent=`pixels:${pixels.length} mode:${mode} variety:${colorVariety}`;
 
-      resolve({pixels, isLineArt});
+      resolve({pixels, isLineArt, isPhoto});
     };
     img.onerror=reject;
     img.src=url;
@@ -465,9 +508,9 @@ function addCenterGlow(x, y, z){
   }
 }
 
-function showImageParticleShape(center, pixels, snapRight, snapUp, isLineArt=false){
+function showImageParticleShape(center, pixels, snapRight, snapUp, isLineArt=false, isPhoto=false){
   const HALF = SHAPE_SCALE * 0.5;
-  const szB  = isLineArt ? 1.4 : 1.0;
+  const szB  = isLineArt ? 1.4 : isPhoto ? 0.85 : 1.0;
   for(const px of pixels){
     // target = 画像ピクセルのワールド座標（通過点）
     const tx = center.x + snapRight.x*px.nx*HALF + snapUp.x*(-px.ny)*HALF;
@@ -566,7 +609,7 @@ function _doLaunch(imgData, snapRight, snapUp){
   launchVector(launchStart, burstAnchor, null, burstPos => {
     setTimeout(()=>boom(), 55);
     if(imgData && imgData.pixels && imgData.pixels.length > 0){
-      showImageParticleShape(burstPos, imgData.pixels, snapRight, snapUp, imgData.isLineArt);
+      showImageParticleShape(burstPos, imgData.pixels, snapRight, snapUp, imgData.isLineArt, imgData.isPhoto);
     }
     // 作品あり・読み込み失敗時は何も出さない（burst混入なし）
   });
