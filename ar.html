@@ -64,7 +64,7 @@ canvas{position:fixed;inset:0;z-index:9999;pointer-events:none;}
 
 <div id="fw-hint">少し上を向いてね ✨</div>
 <div id="pxdbg" style="position:fixed;top:8px;left:10px;z-index:10001;font:10px/1 monospace;color:rgba(255,255,100,.55);pointer-events:none;"></div>
-<div class="ver">v0.2</div>
+<div class="ver">v0.3</div>
 <button id="xrbtn" onclick="enterXR()">AR モード ✦</button>
 <div id="perm">
   <div style="font-size:14px;line-height:2;opacity:.85">
@@ -1007,50 +1007,51 @@ function getAu(){
   audioCtx.resume(); return audioCtx;
 }
 
-// 打ち上げ音：4層構成（発射ドン + 上昇笛 + 倍音 + 噴射ノイズ）
+// 打ち上げ音：スペクトログラム解析ベース（発射ドン + ピュー笛×2 + 噴射ノイズ）
+// 実音 spectrogram より：笛音 2400→4200Hz、継続 ~1.85s
 function whistle(){
   try{
     const ctx=getAu(), now=ctx.currentTime, sr=ctx.sampleRate;
-    const dur=1.20;
+    const dur=1.85;
 
-    // Layer 1: 発射ドン（砲台から飛び出す瞬間の低音衝撃）
-    const nb=Math.floor(sr*0.06);
+    // Layer 1: 発射ドン（砲台低音衝撃 ~70ms）
+    const nb=Math.floor(sr*0.07);
     const bb=ctx.createBuffer(1,nb,sr);
     const db_=bb.getChannelData(0);
-    for(let i=0;i<nb;i++) db_[i]=(Math.random()*2-1)*Math.exp(-i/(nb*0.18));
+    for(let i=0;i<nb;i++) db_[i]=(Math.random()*2-1)*Math.exp(-i/(nb*0.14));
     const sb=ctx.createBufferSource(); sb.buffer=bb;
-    const lpb=ctx.createBiquadFilter(); lpb.type='lowpass'; lpb.frequency.value=220; lpb.Q.value=3.0;
+    const lpb=ctx.createBiquadFilter(); lpb.type='lowpass'; lpb.frequency.value=200; lpb.Q.value=4.0;
     const gb=ctx.createGain();
-    gb.gain.setValueAtTime(0.38,now);
-    gb.gain.exponentialRampToValueAtTime(0.001,now+0.10);
+    gb.gain.setValueAtTime(0.42,now);
+    gb.gain.exponentialRampToValueAtTime(0.001,now+0.12);
     sb.connect(lpb); lpb.connect(gb); gb.connect(ctx.destination);
     sb.start(now);
 
-    // Layer 2: 上昇笛音 sine 220→3000Hz（ヒューーーッ）
+    // Layer 2: メイン笛音 sine 2400→4200Hz（ピュー）
     const o1=ctx.createOscillator(); o1.type='sine';
-    o1.frequency.setValueAtTime(220,now);
-    o1.frequency.exponentialRampToValueAtTime(3000,now+dur);
+    o1.frequency.setValueAtTime(2400,now+0.02);
+    o1.frequency.exponentialRampToValueAtTime(4200,now+dur);
     const g1=ctx.createGain();
     g1.gain.setValueAtTime(0.001,now);
-    g1.gain.exponentialRampToValueAtTime(0.17,now+0.10);
-    g1.gain.setValueAtTime(0.17,now+dur*0.80);
+    g1.gain.linearRampToValueAtTime(0.20,now+0.07);
+    g1.gain.setValueAtTime(0.20,now+dur*0.84);
     g1.gain.exponentialRampToValueAtTime(0.001,now+dur);
     o1.connect(g1); g1.connect(ctx.destination);
     o1.start(now); o1.stop(now+dur+0.05);
 
-    // Layer 3: 倍音 triangle 440→6000Hz（シャリ感・微弱）
-    const o2=ctx.createOscillator(); o2.type='triangle';
-    o2.frequency.setValueAtTime(440,now+0.04);
-    o2.frequency.exponentialRampToValueAtTime(6000,now+dur);
+    // Layer 3: +12Hz デチューン（うなり・コーラスでピュー感を強める）
+    const o2=ctx.createOscillator(); o2.type='sine';
+    o2.frequency.setValueAtTime(2412,now+0.02);
+    o2.frequency.exponentialRampToValueAtTime(4212,now+dur);
     const g2=ctx.createGain();
-    g2.gain.setValueAtTime(0.001,now+0.04);
-    g2.gain.exponentialRampToValueAtTime(0.038,now+0.14);
-    g2.gain.setValueAtTime(0.038,now+dur*0.75);
+    g2.gain.setValueAtTime(0.001,now);
+    g2.gain.linearRampToValueAtTime(0.10,now+0.09);
+    g2.gain.setValueAtTime(0.10,now+dur*0.80);
     g2.gain.exponentialRampToValueAtTime(0.001,now+dur);
     o2.connect(g2); g2.connect(ctx.destination);
-    o2.start(now+0.04); o2.stop(now+dur+0.05);
+    o2.start(now+0.01); o2.stop(now+dur+0.05);
 
-    // Layer 4: 噴射ノイズ bandpass 600→2800Hz（シューーー）
+    // Layer 4: 噴射ノイズ bandpass 600→2000Hz（シュー、笛より控えめ）
     const nLen=Math.floor(sr*dur);
     const nBuf=ctx.createBuffer(1,nLen,sr);
     const nd=nBuf.getChannelData(0);
@@ -1058,12 +1059,12 @@ function whistle(){
     const nSrc=ctx.createBufferSource(); nSrc.buffer=nBuf;
     const bpf=ctx.createBiquadFilter(); bpf.type='bandpass';
     bpf.frequency.setValueAtTime(600,now);
-    bpf.frequency.exponentialRampToValueAtTime(2800,now+dur);
-    bpf.Q.value=1.4;
+    bpf.frequency.exponentialRampToValueAtTime(2000,now+dur);
+    bpf.Q.value=1.2;
     const gn=ctx.createGain();
     gn.gain.setValueAtTime(0.001,now);
-    gn.gain.exponentialRampToValueAtTime(0.052,now+0.07);
-    gn.gain.setValueAtTime(0.052,now+dur*0.72);
+    gn.gain.linearRampToValueAtTime(0.038,now+0.06);
+    gn.gain.setValueAtTime(0.038,now+dur*0.65);
     gn.gain.exponentialRampToValueAtTime(0.001,now+dur);
     nSrc.connect(bpf); bpf.connect(gn); gn.connect(ctx.destination);
     nSrc.start(now); nSrc.stop(now+dur);
