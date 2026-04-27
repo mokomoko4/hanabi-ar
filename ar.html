@@ -64,7 +64,7 @@ canvas{position:fixed;inset:0;z-index:9999;pointer-events:none;}
 
 <div id="fw-hint">少し上を向いてね ✨</div>
 <div id="pxdbg" style="position:fixed;top:8px;left:10px;z-index:10001;font:10px/1 monospace;color:rgba(255,255,100,.55);pointer-events:none;"></div>
-<div class="ver">v10.3</div>
+<div class="ver">v0.1</div>
 <button id="xrbtn" onclick="enterXR()">AR モード ✦</button>
 <div id="perm">
   <div style="font-size:14px;line-height:2;opacity:.85">
@@ -93,22 +93,25 @@ const db = firebase.database();
 let works = [];
 const imageCache = {}; // url → {pixels, mode}
 
-db.ref('works').once('value', snap => {
+db.ref('works').on('value', snap => {
   const data = snap.val() || {};
-  works = Object.entries(data)
+  const newWorks = Object.entries(data)
     .map(([k,v]) => ({id:k,...v}))
     .filter(w => w.type === 'png' && w.url);
-  // 全作品をバックグラウンドでプリキャッシュ（タップ時に即使える）
-  works.forEach(w => {
-    makeImageData(w.url)
-      .then(d => { imageCache[w.url] = d; })
-      .catch(() => {});
+  // 追加分だけプリキャッシュ
+  newWorks.forEach(w => {
+    if(!imageCache[w.url]){
+      makeImageData(w.url)
+        .then(d => { imageCache[w.url] = d; })
+        .catch(() => {});
+    }
   });
+  works = newWorks;
   if(works.length > 0){
     document.getElementById('hintTxt').textContent =
       `タップで絵を花火に！🎆 (${works.length}作品)`;
   }
-}).catch(()=>{});
+});
 
 // ══════════════════════════════════════════════
 // Three.js セットアップ
@@ -760,6 +763,41 @@ function showImageParticleShape(center, pixels, snapRight, snapUp, mode='illust'
       isPhotoMode ? 1 : 0
     );
   }
+  // ── 形成後グロー保持粒子（形がその場で ~1.5秒輝く）──────────
+  // 形成粒子がtargetを通過するタイミング（illust≒8-11f, 他≒11-14f）に
+  // holdが切れるよう設定し、その場にじわっと浮かび上がる
+  const GLOW_HOLD_BASE = (mode==='illust') ? 8 : 11;
+  const glowCap  = isPhotoMode ? 180 : (mode==='line_art'||mode==='text_logo') ? 500 : 380;
+  const glowStep = Math.max(1, Math.floor(pxLen / glowCap));
+  for(let _pi=0; _pi<pxLen; _pi+=glowStep){
+    const px = pixels[_pi];
+    const tx = center.x + snapRight.x*px.nx*HALF + snapUp.x*(-px.ny)*HALF;
+    const ty = center.y + snapRight.y*px.nx*HALF + snapUp.y*(-px.ny)*HALF;
+    const tz = center.z + snapRight.z*px.nx*HALF + snapUp.z*(-px.ny)*HALF;
+    let gr,gg,gb;
+    if(mode==='face_portrait'){
+      const brF=px.r*0.299+px.g*0.587+px.b*0.114;
+      const bst=brF<0.30?3.0:brF<0.55?1.6:1.3;
+      gr=Math.min(1,px.r*bst+0.05); gg=Math.min(1,px.g*bst+0.03); gb=Math.min(1,px.b*bst+0.03);
+    } else {
+      [gr,gg,gb]=mapFireworkColor(px.r,px.g,px.b);
+      if(mode==='text_logo'){
+        gr=Math.min(1,gr*1.30+0.08); gg=Math.min(1,gg*1.30+0.08); gb=Math.min(1,gb*1.30+0.08);
+      }
+    }
+    // 輝度を少し底上げしてグロー感を出す
+    gr=Math.min(1,gr*1.15+0.05); gg=Math.min(1,gg*1.15+0.05); gb=Math.min(1,gb*1.15+0.05);
+    addP(
+      tx, ty, tz,
+      (Math.random()-.5)*0.004, -0.0006+(Math.random()-.5)*0.001, (Math.random()-.5)*0.004,
+      gr, gg, gb,
+      0.008 + Math.random()*0.004,                         // decay: ~90-125f ≒ 1.5-2s
+      (isPhotoMode ? 0.09 : 0.12) * szB,
+      GLOW_HOLD_BASE + Math.floor(Math.random()*5),        // hold: 形成ピークに合わせて起動
+      isPhotoMode ? 1 : 0
+    );
+  }
+
   // 爆発中心フラッシュ（2粒子のみ・小さく短命）
   for(let i=0;i<2;i++){
     addP(center.x,center.y,center.z,
@@ -1004,53 +1042,66 @@ function getAu(){
   audioCtx.resume(); return audioCtx;
 }
 
-// 打ち上げ音：3層構成（笛音 + 噴射ノイズ + 低音推進）
+// 打ち上げ音：4層構成（発射ドン + 上昇笛 + 倍音 + 噴射ノイズ）
 function whistle(){
   try{
-    const ctx=getAu(), now=ctx.currentTime;
-    const dur=1.15;
+    const ctx=getAu(), now=ctx.currentTime, sr=ctx.sampleRate;
+    const dur=1.20;
 
-    // Layer 1: 笛音 triangle 350→1200Hz（ヒューーーッ）
-    const o1=ctx.createOscillator(), g1=ctx.createGain();
-    o1.type='triangle';
-    o1.frequency.setValueAtTime(350,now);
-    o1.frequency.exponentialRampToValueAtTime(1200,now+dur);
+    // Layer 1: 発射ドン（砲台から飛び出す瞬間の低音衝撃）
+    const nb=Math.floor(sr*0.06);
+    const bb=ctx.createBuffer(1,nb,sr);
+    const db_=bb.getChannelData(0);
+    for(let i=0;i<nb;i++) db_[i]=(Math.random()*2-1)*Math.exp(-i/(nb*0.18));
+    const sb=ctx.createBufferSource(); sb.buffer=bb;
+    const lpb=ctx.createBiquadFilter(); lpb.type='lowpass'; lpb.frequency.value=220; lpb.Q.value=3.0;
+    const gb=ctx.createGain();
+    gb.gain.setValueAtTime(0.38,now);
+    gb.gain.exponentialRampToValueAtTime(0.001,now+0.10);
+    sb.connect(lpb); lpb.connect(gb); gb.connect(ctx.destination);
+    sb.start(now);
+
+    // Layer 2: 上昇笛音 sine 220→3000Hz（ヒューーーッ）
+    const o1=ctx.createOscillator(); o1.type='sine';
+    o1.frequency.setValueAtTime(220,now);
+    o1.frequency.exponentialRampToValueAtTime(3000,now+dur);
+    const g1=ctx.createGain();
     g1.gain.setValueAtTime(0.001,now);
-    g1.gain.exponentialRampToValueAtTime(0.07,now+0.08);
-    g1.gain.exponentialRampToValueAtTime(0.11,now+dur*0.85);
+    g1.gain.exponentialRampToValueAtTime(0.17,now+0.10);
+    g1.gain.setValueAtTime(0.17,now+dur*0.80);
     g1.gain.exponentialRampToValueAtTime(0.001,now+dur);
     o1.connect(g1); g1.connect(ctx.destination);
-    o1.start(now); o1.stop(now+dur);
+    o1.start(now); o1.stop(now+dur+0.05);
 
-    // Layer 2: 噴射ノイズ bandpass 900→2200Hz（シューーー）
-    const sr=ctx.sampleRate;
+    // Layer 3: 倍音 triangle 440→6000Hz（シャリ感・微弱）
+    const o2=ctx.createOscillator(); o2.type='triangle';
+    o2.frequency.setValueAtTime(440,now+0.04);
+    o2.frequency.exponentialRampToValueAtTime(6000,now+dur);
+    const g2=ctx.createGain();
+    g2.gain.setValueAtTime(0.001,now+0.04);
+    g2.gain.exponentialRampToValueAtTime(0.038,now+0.14);
+    g2.gain.setValueAtTime(0.038,now+dur*0.75);
+    g2.gain.exponentialRampToValueAtTime(0.001,now+dur);
+    o2.connect(g2); g2.connect(ctx.destination);
+    o2.start(now+0.04); o2.stop(now+dur+0.05);
+
+    // Layer 4: 噴射ノイズ bandpass 600→2800Hz（シューーー）
     const nLen=Math.floor(sr*dur);
     const nBuf=ctx.createBuffer(1,nLen,sr);
     const nd=nBuf.getChannelData(0);
     for(let i=0;i<nLen;i++) nd[i]=Math.random()*2-1;
     const nSrc=ctx.createBufferSource(); nSrc.buffer=nBuf;
     const bpf=ctx.createBiquadFilter(); bpf.type='bandpass';
-    bpf.frequency.setValueAtTime(900,now);
-    bpf.frequency.exponentialRampToValueAtTime(2200,now+dur);
-    bpf.Q.value=0.8;
-    const g2=ctx.createGain();
-    g2.gain.setValueAtTime(0.001,now);
-    g2.gain.exponentialRampToValueAtTime(0.05,now+0.05);
-    g2.gain.exponentialRampToValueAtTime(0.09,now+dur*0.8);
-    g2.gain.exponentialRampToValueAtTime(0.001,now+dur);
-    nSrc.connect(bpf); bpf.connect(g2); g2.connect(ctx.destination);
+    bpf.frequency.setValueAtTime(600,now);
+    bpf.frequency.exponentialRampToValueAtTime(2800,now+dur);
+    bpf.Q.value=1.4;
+    const gn=ctx.createGain();
+    gn.gain.setValueAtTime(0.001,now);
+    gn.gain.exponentialRampToValueAtTime(0.052,now+0.07);
+    gn.gain.setValueAtTime(0.052,now+dur*0.72);
+    gn.gain.exponentialRampToValueAtTime(0.001,now+dur);
+    nSrc.connect(bpf); bpf.connect(gn); gn.connect(ctx.destination);
     nSrc.start(now); nSrc.stop(now+dur);
-
-    // Layer 3: 低音推進 sawtooth 90→140Hz（ゴォーッ）
-    const o3=ctx.createOscillator(), g3=ctx.createGain();
-    o3.type='sawtooth';
-    o3.frequency.setValueAtTime(90,now);
-    o3.frequency.linearRampToValueAtTime(140,now+dur);
-    g3.gain.setValueAtTime(0.001,now);
-    g3.gain.exponentialRampToValueAtTime(0.020,now+0.05);
-    g3.gain.exponentialRampToValueAtTime(0.001,now+dur);
-    o3.connect(g3); g3.connect(ctx.destination);
-    o3.start(now); o3.stop(now+dur);
   }catch(_){}
 }
 
