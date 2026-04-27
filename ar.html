@@ -763,41 +763,6 @@ function showImageParticleShape(center, pixels, snapRight, snapUp, mode='illust'
       isPhotoMode ? 1 : 0
     );
   }
-  // ── 形成後グロー保持粒子（形がその場で ~1.5秒輝く）──────────
-  // 形成粒子がtargetを通過するタイミング（illust≒8-11f, 他≒11-14f）に
-  // holdが切れるよう設定し、その場にじわっと浮かび上がる
-  const GLOW_HOLD_BASE = (mode==='illust') ? 8 : 11;
-  const glowCap  = isPhotoMode ? 180 : (mode==='line_art'||mode==='text_logo') ? 500 : 380;
-  const glowStep = Math.max(1, Math.floor(pxLen / glowCap));
-  for(let _pi=0; _pi<pxLen; _pi+=glowStep){
-    const px = pixels[_pi];
-    const tx = center.x + snapRight.x*px.nx*HALF + snapUp.x*(-px.ny)*HALF;
-    const ty = center.y + snapRight.y*px.nx*HALF + snapUp.y*(-px.ny)*HALF;
-    const tz = center.z + snapRight.z*px.nx*HALF + snapUp.z*(-px.ny)*HALF;
-    let gr,gg,gb;
-    if(mode==='face_portrait'){
-      const brF=px.r*0.299+px.g*0.587+px.b*0.114;
-      const bst=brF<0.30?3.0:brF<0.55?1.6:1.3;
-      gr=Math.min(1,px.r*bst+0.05); gg=Math.min(1,px.g*bst+0.03); gb=Math.min(1,px.b*bst+0.03);
-    } else {
-      [gr,gg,gb]=mapFireworkColor(px.r,px.g,px.b);
-      if(mode==='text_logo'){
-        gr=Math.min(1,gr*1.30+0.08); gg=Math.min(1,gg*1.30+0.08); gb=Math.min(1,gb*1.30+0.08);
-      }
-    }
-    // 輝度を少し底上げしてグロー感を出す
-    gr=Math.min(1,gr*1.15+0.05); gg=Math.min(1,gg*1.15+0.05); gb=Math.min(1,gb*1.15+0.05);
-    addP(
-      tx, ty, tz,
-      (Math.random()-.5)*0.004, -0.0006+(Math.random()-.5)*0.001, (Math.random()-.5)*0.004,
-      gr, gg, gb,
-      0.008 + Math.random()*0.004,                         // decay: ~90-125f ≒ 1.5-2s
-      (isPhotoMode ? 0.09 : 0.12) * szB,
-      GLOW_HOLD_BASE + Math.floor(Math.random()*5),        // hold: 形成ピークに合わせて起動
-      isPhotoMode ? 1 : 0
-    );
-  }
-
   // 爆発中心フラッシュ（2粒子のみ・小さく短命）
   for(let i=0;i<2;i++){
     addP(center.x,center.y,center.z,
