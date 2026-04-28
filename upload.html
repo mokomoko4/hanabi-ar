@@ -330,8 +330,8 @@ function moveDraw(e) {
   drawCtx.lineCap = 'round';
   drawCtx.lineJoin = 'round';
   if (erasing) {
-    drawCtx.globalCompositeOperation = 'destination-out';
-    drawCtx.strokeStyle = 'rgba(0,0,0,1)';
+    drawCtx.globalCompositeOperation = 'source-over';
+    drawCtx.strokeStyle = canvasBg;
     drawCtx.lineWidth = penSize * 2;
   } else {
     drawCtx.globalCompositeOperation = 'source-over';
