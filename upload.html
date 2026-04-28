@@ -48,11 +48,44 @@ body{font-family:'Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif;backgroun
 .name-input:focus{border-color:rgba(255,200,60,0.4);}
 
 /* ファイル選択ボタン */
-.file-btns{display:grid;grid-template-columns:1fr;gap:10px;margin-top:8px;}
+.file-btns{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;}
 .file-btn{padding:12px 8px;border-radius:12px;border:1.5px dashed rgba(255,255,255,0.2);background:transparent;color:var(--muted);font-size:12px;text-align:center;cursor:pointer;transition:all 0.15s;}
 .file-btn:active{transform:scale(0.97);}
 .file-btn.png-btn{border-color:rgba(100,255,150,0.3);}
+.file-btn.draw-btn{border-color:rgba(100,180,255,0.4);color:rgba(120,200,255,0.9);}
 .file-btn .bi{font-size:24px;display:block;margin-bottom:4px;}
+
+/* お絵描きモーダル */
+.draw-modal{
+  display:none;position:fixed;inset:0;z-index:100;
+  background:#06001a;flex-direction:column;
+}
+.draw-modal.open{display:flex;}
+.draw-header{
+  padding:10px 12px;display:flex;align-items:center;justify-content:space-between;
+  background:rgba(15,0,40,0.95);flex-shrink:0;
+}
+.draw-title{font-size:14px;font-weight:700;color:var(--gold);}
+.draw-done{padding:8px 20px;border-radius:20px;border:none;background:linear-gradient(135deg,#ff6b00,#ffcc00);color:#000;font-size:13px;font-weight:900;cursor:pointer;}
+.draw-canvas-wrap{flex:1;position:relative;overflow:hidden;touch-action:none;}
+#drawCanvas{display:block;width:100%;height:100%;cursor:crosshair;}
+.draw-toolbar{
+  padding:10px 12px 16px;background:rgba(15,0,40,0.95);
+  display:flex;align-items:center;gap:10px;flex-shrink:0;flex-wrap:wrap;
+}
+.color-btns{display:flex;gap:6px;align-items:center;}
+.color-dot{width:26px;height:26px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:transform 0.1s;}
+.color-dot.active{border-color:#fff;transform:scale(1.2);}
+.tool-sep{width:1px;height:28px;background:var(--border);}
+.size-wrap{display:flex;align-items:center;gap:6px;}
+.size-wrap input[type=range]{width:80px;accent-color:var(--gold);}
+.eraser-btn{padding:6px 14px;border-radius:20px;border:1px solid rgba(255,255,255,0.2);background:transparent;color:var(--muted);font-size:12px;cursor:pointer;}
+.eraser-btn.active{background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.5);}
+.clear-btn{padding:6px 14px;border-radius:20px;border:1px solid rgba(255,100,100,0.3);background:transparent;color:rgba(255,120,120,0.8);font-size:12px;cursor:pointer;}
+.bg-btns{display:flex;gap:6px;align-items:center;}
+.bg-dot{width:22px;height:22px;border-radius:50%;cursor:pointer;border:2px solid transparent;}
+.bg-dot.active{border-color:var(--gold);}
+.tool-label{font-size:10px;color:var(--muted);}
 
 /* アップロードボタン */
 .upload-btn{
@@ -138,6 +171,10 @@ body{font-family:'Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif;backgroun
       <span class="bi">🖼️</span>
       えや写真<br>（PNG・JPG）
     </div>
+    <div class="file-btn draw-btn" onclick="openDrawModal()">
+      <span class="bi">✏️</span>
+      お絵描きする<br>（ここで描く）
+    </div>
   </div>
 
   <!-- アップロードボタン -->
@@ -163,6 +200,55 @@ body{font-family:'Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif;backgroun
 
 </div>
 
+<!-- お絵描きモーダル -->
+<div class="draw-modal" id="drawModal">
+  <div class="draw-header">
+    <div class="draw-title">✏️ お絵描き</div>
+    <button class="draw-done" onclick="finishDraw()">できた！</button>
+  </div>
+  <div class="draw-canvas-wrap" id="drawCanvasWrap">
+    <canvas id="drawCanvas"></canvas>
+  </div>
+  <div class="draw-toolbar">
+    <div>
+      <div class="tool-label">いろ</div>
+      <div class="color-btns" id="colorBtns">
+        <div class="color-dot active" data-color="#ffffff" style="background:#ffffff;" onclick="setColor(this)"></div>
+        <div class="color-dot" data-color="#ff4444" style="background:#ff4444;" onclick="setColor(this)"></div>
+        <div class="color-dot" data-color="#ff9900" style="background:#ff9900;" onclick="setColor(this)"></div>
+        <div class="color-dot" data-color="#ffee00" style="background:#ffee00;" onclick="setColor(this)"></div>
+        <div class="color-dot" data-color="#44ff88" style="background:#44ff88;" onclick="setColor(this)"></div>
+        <div class="color-dot" data-color="#44aaff" style="background:#44aaff;" onclick="setColor(this)"></div>
+        <div class="color-dot" data-color="#ff44ff" style="background:#ff44ff;" onclick="setColor(this)"></div>
+        <div class="color-dot" data-color="#000000" style="background:#000;border:1.5px solid #444;" onclick="setColor(this)"></div>
+      </div>
+    </div>
+    <div class="tool-sep"></div>
+    <div>
+      <div class="tool-label">ふとさ</div>
+      <div class="size-wrap">
+        <span style="font-size:10px;">細</span>
+        <input type="range" id="sizeSlider" min="2" max="40" value="8" oninput="penSize=+this.value">
+        <span style="font-size:10px;">太</span>
+      </div>
+    </div>
+    <div class="tool-sep"></div>
+    <button class="eraser-btn" id="eraserBtn" onclick="toggleEraser()">消しゴム</button>
+    <div class="tool-sep"></div>
+    <div>
+      <div class="tool-label">背景</div>
+      <div class="bg-btns">
+        <div class="bg-dot active" data-bg="#06001a" style="background:#06001a;border:1.5px solid #444;" onclick="setBg(this,'#06001a')"></div>
+        <div class="bg-dot" data-bg="#ffffff" style="background:#ffffff;" onclick="setBg(this,'#ffffff')"></div>
+        <div class="bg-dot" data-bg="#ffe0f0" style="background:#ffe0f0;" onclick="setBg(this,'#ffe0f0')"></div>
+        <div class="bg-dot" data-bg="#e0f8ff" style="background:#e0f8ff;" onclick="setBg(this,'#e0f8ff')"></div>
+      </div>
+    </div>
+    <div class="tool-sep"></div>
+    <button class="clear-btn" onclick="clearCanvas()">クリア</button>
+  </div>
+</div>
+
 <script>
 // Firebase設定
 const firebaseConfig = {
@@ -181,6 +267,127 @@ const storage = firebase.storage();
 
 let selectedFile = null;
 let selectedType = null;
+
+// ===== お絵描き =====
+let drawCtx, drawCanvas;
+let drawing = false;
+let penColor = '#ffffff';
+let penSize = 8;
+let erasing = false;
+let canvasBg = '#06001a';
+
+function openDrawModal() {
+  document.getElementById('drawModal').classList.add('open');
+  initCanvas();
+}
+
+function initCanvas() {
+  drawCanvas = document.getElementById('drawCanvas');
+  const wrap = document.getElementById('drawCanvasWrap');
+  drawCanvas.width = wrap.clientWidth;
+  drawCanvas.height = wrap.clientHeight;
+  drawCtx = drawCanvas.getContext('2d');
+  drawCtx.fillStyle = canvasBg;
+  drawCtx.fillRect(0, 0, drawCanvas.width, drawCanvas.height);
+
+  drawCanvas.addEventListener('pointerdown', startDraw, {passive:false});
+  drawCanvas.addEventListener('pointermove', moveDraw, {passive:false});
+  drawCanvas.addEventListener('pointerup', endDraw);
+  drawCanvas.addEventListener('pointercancel', endDraw);
+}
+
+function getPos(e) {
+  const rect = drawCanvas.getBoundingClientRect();
+  const scaleX = drawCanvas.width / rect.width;
+  const scaleY = drawCanvas.height / rect.height;
+  return {
+    x: (e.clientX - rect.left) * scaleX,
+    y: (e.clientY - rect.top) * scaleY
+  };
+}
+
+function startDraw(e) {
+  e.preventDefault();
+  drawing = true;
+  const pos = getPos(e);
+  drawCtx.beginPath();
+  drawCtx.moveTo(pos.x, pos.y);
+}
+
+function moveDraw(e) {
+  e.preventDefault();
+  if (!drawing) return;
+  const pos = getPos(e);
+  drawCtx.lineWidth = penSize;
+  drawCtx.lineCap = 'round';
+  drawCtx.lineJoin = 'round';
+  if (erasing) {
+    drawCtx.globalCompositeOperation = 'destination-out';
+    drawCtx.strokeStyle = 'rgba(0,0,0,1)';
+    drawCtx.lineWidth = penSize * 2;
+  } else {
+    drawCtx.globalCompositeOperation = 'source-over';
+    drawCtx.strokeStyle = penColor;
+  }
+  drawCtx.lineTo(pos.x, pos.y);
+  drawCtx.stroke();
+  drawCtx.beginPath();
+  drawCtx.moveTo(pos.x, pos.y);
+}
+
+function endDraw() { drawing = false; drawCtx && drawCtx.beginPath(); }
+
+function setColor(el) {
+  erasing = false;
+  document.getElementById('eraserBtn').classList.remove('active');
+  penColor = el.dataset.color;
+  document.querySelectorAll('.color-dot').forEach(d => d.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function toggleEraser() {
+  erasing = !erasing;
+  document.getElementById('eraserBtn').classList.toggle('active', erasing);
+}
+
+function setBg(el, color) {
+  canvasBg = color;
+  document.querySelectorAll('.bg-dot').forEach(d => d.classList.remove('active'));
+  el.classList.add('active');
+  if (drawCtx) {
+    const imageData = drawCtx.getImageData(0, 0, drawCanvas.width, drawCanvas.height);
+    drawCtx.fillStyle = color;
+    drawCtx.fillRect(0, 0, drawCanvas.width, drawCanvas.height);
+    drawCtx.putImageData(imageData, 0, 0);
+  }
+}
+
+function clearCanvas() {
+  if (!drawCtx) return;
+  drawCtx.globalCompositeOperation = 'source-over';
+  drawCtx.fillStyle = canvasBg;
+  drawCtx.fillRect(0, 0, drawCanvas.width, drawCanvas.height);
+}
+
+function finishDraw() {
+  drawCtx.globalCompositeOperation = 'source-over';
+  drawCanvas.toBlob(blob => {
+    selectedFile = new File([blob], `oekaki_${Date.now()}.png`, {type:'image/png'});
+    selectedType = 'png';
+
+    const url = URL.createObjectURL(blob);
+    const wrap = document.getElementById('previewWrap');
+    wrap.innerHTML = `
+      <img src="${url}" style="width:100%;height:100%;object-fit:contain;">
+      <div class="preview-badge png">お絵描き</div>
+    `;
+    wrap.onclick = () => openDrawModal();
+
+    document.getElementById('uploadBtn').classList.add('show');
+    document.getElementById('successMsg').classList.remove('show');
+    document.getElementById('drawModal').classList.remove('open');
+  }, 'image/png');
+}
 
 // PNG選択
 function handlePNG(input) {
@@ -261,6 +468,7 @@ async function uploadWork() {
     `;
     document.getElementById('previewWrap').onclick = () => document.getElementById('pngInput').click();
     document.getElementById('pngInput').value = '';
+    if (drawCtx) clearCanvas();
 
   } catch(e) {
     alert('エラーが発生しました: ' + e.message);
