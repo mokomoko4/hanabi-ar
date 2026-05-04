@@ -64,7 +64,7 @@ canvas{position:fixed;inset:0;z-index:9999;pointer-events:none;}
 
 <div id="fw-hint">少し上を向いてね ✨</div>
 <div id="pxdbg" style="position:fixed;top:8px;left:10px;z-index:10001;font:10px/1 monospace;color:rgba(255,255,100,.55);pointer-events:none;"></div>
-<div class="ver">v0.7</div>
+<div class="ver">v0.8</div>
 <button id="xrbtn" onclick="enterXR()">AR モード ✦</button>
 <div id="perm">
   <div style="font-size:14px;line-height:2;opacity:.85">
@@ -222,14 +222,15 @@ const mat = new THREE.ShaderMaterial({
       vec4 mv=modelViewMatrix*vec4(position,1.);
       float lum=dot(aC,vec3(0.299,0.587,0.114));
       float szMod=0.82+lum*0.36;
-      gl_PointSize=max(11.0, aS*uSizeBoost*szMod*(820.0/-mv.z));
+      float minSz=(aR>1.5)?14.0:11.0;
+      gl_PointSize=max(minSz, aS*uSizeBoost*szMod*(820.0/-mv.z));
       gl_Position=projectionMatrix*mv;
     }`,
   fragmentShader:`
     varying vec3 vC; varying float vA; varying float vR;
     void main(){
       float d=length(gl_PointCoord-vec2(.5))*2.;
-      if(vR>0.5){
+      if(vR>0.5&&vR<1.5){
         // 写真・顔モード：柔らかい円形光粒（四角モザイク感を除去）
         if(d>1.0) discard;
         float soft=smoothstep(1.0,0.15,d);
@@ -237,6 +238,15 @@ const mat = new THREE.ShaderMaterial({
         float a=soft*vA;
         if(a<0.01) discard;
         vec3 col=clamp(vC*(1.0+inner*2.8),0.,1.);
+        gl_FragColor=vec4(col,a);
+      } else if(vR>1.5){
+        // キャラクターモード：大粒・強めグロー
+        float core=1.-smoothstep(.0,.24,d);
+        float glow=1.-smoothstep(.0,.62,d);
+        float halo=1.-smoothstep(.16,1.,d);
+        float a=(core*.95+glow*.44+halo*.22)*vA;
+        if(a<.01)discard;
+        vec3 col=clamp(vC*(1.+core*4.5+glow*1.2),0.,1.);
         gl_FragColor=vec4(col,a);
       } else {
         // 線画・文字・通常モード：シャープ発光粒子
@@ -529,8 +539,8 @@ function makeImageData(url){
         outlinePx.sort(()=>Math.random()-.5);
         featurePx.sort(()=>Math.random()-.5);
         fillPx.sort(()=>Math.random()-.5);
-        pixels.push(...outlinePx.slice(0,1000),...featurePx.slice(0,400),...fillPx.slice(0,200));
-        if(pixels.length>1400){pixels.sort(()=>Math.random()-.5);pixels.length=1400;}
+        pixels.push(...outlinePx.slice(0,1200),...featurePx.slice(0,500),...fillPx.slice(0,300));
+        if(pixels.length>2000){pixels.sort(()=>Math.random()-.5);pixels.length=2000;}
       } else {
         // illust
         const edgePx=[],interPx=[];
@@ -611,10 +621,10 @@ function addCenterGlow(x, y, z){
 }
 
 function showImageParticleShape(center, pixels, snapRight, snapUp, mode='character'){
-  const scaleMul = (mode==='character') ? 0.62 : 0.50;
+  const scaleMul = (mode==='character') ? 0.72 : 0.50;
   const HALF = SHAPE_SCALE * scaleMul;
   const szB  = (mode==='line_art') ? 1.5 : (mode==='text_logo') ? 1.4 : (mode==='character') ? 1.1 : 1.0;
-  const pxLen = Math.min(pixels.length, _IMG_MAX);
+  const pxLen = mode==='character' ? Math.min(pixels.length, 2000) : Math.min(pixels.length, _IMG_MAX);
   for(let _pi=0; _pi<pxLen; _pi++){
     const px = pixels[_pi];
     const tx = center.x + snapRight.x*px.nx*HALF + snapUp.x*(-px.ny)*HALF;
@@ -632,11 +642,11 @@ function showImageParticleShape(center, pixels, snapRight, snapUp, mode='charact
       let cr,cg,cb;
       if(mode==='character'){
         const br=px.r*0.299+px.g*0.587+px.b*0.114;
-        if(br<0.18){                                          cr=1.0;cg=0.82;cb=0.28;}
-        else if(px.r>0.84&&px.g>0.82&&px.b>0.72){           cr=1.0;cg=0.94;cb=0.62;}
-        else if(px.r>0.65&&px.g<0.45&&px.b<0.45){           cr=1.0;cg=0.28;cb=0.35;}
-        else if(px.r>0.65&&px.g>0.55&&px.b<0.35){           cr=1.0;cg=0.86;cb=0.18;}
-        else if(px.r>0.65&&px.g>0.30&&px.b<0.25){           cr=1.0;cg=0.52;cb=0.12;}
+        if(br<0.18){                                          cr=1.0;cg=0.88;cb=0.30;}
+        else if(px.r>0.84&&px.g>0.82&&px.b>0.72){           cr=1.0;cg=0.96;cb=0.72;}
+        else if(px.r>0.65&&px.g<0.45&&px.b<0.45){           cr=1.0;cg=0.22;cb=0.38;}
+        else if(px.r>0.65&&px.g>0.55&&px.b<0.35){           cr=1.0;cg=0.90;cb=0.12;}
+        else if(px.r>0.65&&px.g>0.30&&px.b<0.25){           cr=1.0;cg=0.58;cb=0.08;}
         else { [cr,cg,cb]=mapFireworkColor(px.r,px.g,px.b); }
       } else {
         [cr,cg,cb]=mapFireworkColor(px.r,px.g,px.b);
@@ -646,20 +656,36 @@ function showImageParticleShape(center, pixels, snapRight, snapUp, mode='charact
       }
       let pSize;
       if(mode==='character'){
-        const szMul = px.type===1 ? 1.15 : px.type===2 ? 0.85 : 1.0;
-        pSize=(0.150+Math.random()*0.053)*szB*szMul;
+        const baseSize = (0.215 + Math.random()*0.075) * szB;
+        const szMul = px.type===1 ? 1.20 : px.type===2 ? 0.85 : 1.00;
+        pSize = baseSize * szMul;
       } else {
         pSize=(0.07+Math.random()*0.05)*szB;
       }
-      addDirP(center.x,center.y,center.z, tx,ty,tz, cr,cg,cb, extraFrac, pSize, 0.004+Math.random()*0.003, 0);
+      addDirP(center.x,center.y,center.z, tx,ty,tz, cr,cg,cb, extraFrac, pSize, 0.004+Math.random()*0.003, mode==='character' ? 2 : 0);
     }
   }
-  for(let i=0;i<2;i++){
-    addP(center.x,center.y,center.z,
-      (Math.random()-.5)*.008,(Math.random()-.5)*.008,(Math.random()-.5)*.008,
-      1,1,1, 0.12+Math.random()*0.06, 0.35+Math.random()*0.20);
+  if(mode==='character'){
+    for(let i=0;i<2;i++){
+      addP(center.x,center.y,center.z,
+        (Math.random()-.5)*.005,(Math.random()-.5)*.005,(Math.random()-.5)*.005,
+        1,1,1, 0.18+Math.random()*0.10, 0.20+Math.random()*0.12);
+    }
+    for(let i=0;i<3;i++){
+      const gc=Math.random()<0.5?[1,0.95,0.55]:[1,1,1];
+      const r2=Math.random()*0.09;
+      addP(center.x,center.y,center.z,
+        (Math.random()-.5)*r2,(Math.random()-.5)*r2,(Math.random()-.5)*r2,
+        gc[0],gc[1],gc[2], 0.030+Math.random()*0.012, 0.50+Math.random()*0.30);
+    }
+  } else {
+    for(let i=0;i<2;i++){
+      addP(center.x,center.y,center.z,
+        (Math.random()-.5)*.008,(Math.random()-.5)*.008,(Math.random()-.5)*.008,
+        1,1,1, 0.12+Math.random()*0.06, 0.35+Math.random()*0.20);
+    }
+    addCenterGlow(center.x, center.y, center.z);
   }
-  addCenterGlow(center.x, center.y, center.z);
 }
 
 
