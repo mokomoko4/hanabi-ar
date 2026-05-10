@@ -4,142 +4,249 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>はなびAR</title>
-<script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.3.0/model-viewer.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://unpkg.com/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 body{overflow:hidden;background:#000;font-family:'Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif;}
 #bgVideo{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;}
-#arCanvas{position:fixed;inset:0;width:100%;height:100%;z-index:1;pointer-events:none;}
-.ar-ui{position:fixed;inset:0;z-index:10;display:flex;flex-direction:column;pointer-events:none;}
-.ar-header{padding:14px 16px 10px;background:linear-gradient(180deg,rgba(0,0,0,0.75) 0%,transparent 100%);display:flex;align-items:center;gap:10px;pointer-events:all;}
-.ar-back{width:36px;height:36px;border-radius:50%;border:1px solid rgba(255,255,255,0.3);background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;color:#fff;text-decoration:none;}
-.ar-title{font-size:14px;font-weight:700;color:#ffcc44;}
-.ar-sub{font-size:10px;color:rgba(255,255,255,0.5);margin-top:2px;}
-.ar-count{margin-left:auto;padding:4px 12px;border-radius:20px;background:rgba(255,200,60,0.15);border:1px solid rgba(255,200,60,0.3);font-size:11px;color:#ffcc44;}
-.ar-ver{font-size:9px;color:rgba(255,255,255,0.25);margin-left:4px;}
-.ar-status{margin:auto auto 0;padding:8px 20px;background:rgba(0,0,0,0.6);border:1px solid rgba(255,255,255,0.15);border-radius:20px;font-size:12px;color:rgba(255,255,255,0.8);text-align:center;transition:all 0.4s;}
-.ar-status.found{border-color:rgba(100,255,150,0.5);color:#88ffaa;background:rgba(0,40,20,0.7);}
-.ar-bottom{padding:12px 16px 28px;background:linear-gradient(0deg,rgba(0,0,0,0.75) 0%,transparent 100%);display:flex;gap:8px;pointer-events:all;}
-.ar-btn{flex:1;padding:11px 8px;border-radius:14px;border:1px solid rgba(255,255,255,0.2);background:rgba(0,0,0,0.5);color:#fff;font-size:11px;text-align:center;cursor:pointer;}
-.ar-btn .bi{font-size:20px;display:block;margin-bottom:3px;}
+#arCanvas{position:fixed;inset:0;width:100%;height:100%;z-index:1;touch-action:none;}
+#fxCanvas{position:fixed;inset:0;width:100%;height:100%;z-index:7;pointer-events:none;}
+
+/* UI レイヤー */
+.ui{position:fixed;inset:0;z-index:10;display:flex;flex-direction:column;pointer-events:none;}
+.header{
+  padding:14px 16px 10px;
+  background:linear-gradient(180deg,rgba(0,0,0,0.8) 0%,transparent 100%);
+  display:flex;align-items:center;gap:10px;pointer-events:all;
+}
+.back{
+  width:36px;height:36px;border-radius:50%;
+  border:1px solid rgba(255,255,255,0.3);background:rgba(0,0,0,0.5);
+  display:flex;align-items:center;justify-content:center;
+  font-size:18px;cursor:pointer;color:#fff;text-decoration:none;flex-shrink:0;
+}
+.htitle{font-size:14px;font-weight:700;color:#ffcc44;}
+.hsub{font-size:10px;color:rgba(255,255,255,0.5);margin-top:2px;}
+.count{
+  margin-left:auto;padding:4px 12px;border-radius:20px;
+  background:rgba(255,200,60,0.15);border:1px solid rgba(255,200,60,0.3);
+  font-size:11px;color:#ffcc44;white-space:nowrap;
+}
+.status{
+  margin:auto auto 0;padding:8px 20px;
+  background:rgba(0,0,0,0.65);border:1px solid rgba(255,255,255,0.15);
+  border-radius:20px;font-size:12px;color:rgba(255,255,255,0.85);
+  text-align:center;transition:all 0.4s;pointer-events:none;
+  max-width:calc(100% - 32px);
+}
+.status.green{border-color:rgba(100,255,150,0.5);color:#88ffaa;background:rgba(0,40,20,0.7);}
+.bottom{
+  padding:12px 16px 28px;
+  background:linear-gradient(0deg,rgba(0,0,0,0.8) 0%,transparent 100%);
+  display:flex;gap:8px;pointer-events:all;
+}
+.btn{
+  flex:1;padding:11px 8px;border-radius:14px;
+  border:1px solid rgba(255,255,255,0.2);background:rgba(0,0,0,0.5);
+  color:#fff;font-size:11px;text-align:center;cursor:pointer;
+}
+.btn .bi{font-size:20px;display:block;margin-bottom:3px;}
+
+/* iPhone ジャイロ許可オーバーレイ */
+#gyroPrompt{
+  position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.93);
+  display:none;flex-direction:column;align-items:center;justify-content:center;
+  gap:20px;padding:40px;
+}
+#gyroPrompt h2{font-size:22px;font-weight:900;color:#ffcc44;text-align:center;}
+#gyroPrompt p{font-size:13px;color:rgba(255,255,255,0.65);text-align:center;line-height:1.9;}
+#gyroPrompt .gyro-btn{
+  padding:16px 48px;border:none;border-radius:18px;
+  background:linear-gradient(135deg,#ff6b00,#ffcc00);
+  color:#000;font-size:16px;font-weight:900;cursor:pointer;
+}
 </style>
 </head>
 <body>
 
 <video id="bgVideo" autoplay playsinline muted></video>
 <canvas id="arCanvas"></canvas>
-<canvas id="fxCanvas" style="position:fixed;inset:0;width:100%;height:100%;z-index:7;pointer-events:none;"></canvas>
+<canvas id="fxCanvas"></canvas>
 
-<div class="ar-ui">
-  <div class="ar-header">
-    <a class="ar-back" href="index.html">←</a>
+<!-- iPhone ジャイロ許可 -->
+<div id="gyroPrompt">
+  <h2>🎆 AR空間に入るよ！</h2>
+  <p>スマホを動かして<br>みんなの作品を見渡してね！<br><br>センサーの許可が必要です</p>
+  <button class="gyro-btn" id="gyroBtn">許可して入る ▶</button>
+</div>
+
+<div class="ui">
+  <div class="header">
+    <a class="back" href="index.html">←</a>
     <div>
-      <div class="ar-title">花火の写真に向けてね</div>
-      <div class="ar-sub" id="arSub">看板の花火写真にカメラを向けよう</div>
+      <div class="htitle">みんなのはなびAR</div>
+      <div class="hsub" id="arSub">カメラ起動中…</div>
     </div>
-    <div class="ar-count" id="arCount">0 作品</div>
-    <div class="ar-ver">v4.4</div>
+    <div class="count" id="arCount">読込中…</div>
   </div>
-  <div class="ar-status" id="arStatus">📷 マーカーを探しています…</div>
-  <div class="ar-bottom">
-    <div class="ar-btn" onclick="window.location.href='index.html'"><span class="bi">←</span>もどる</div>
-    <div class="ar-btn" onclick="alert('スマホのスクショで撮ってね！')"><span class="bi">📸</span>写真を撮る</div>
+  <div class="status green" id="arStatus">📷 カメラ起動中…</div>
+  <div class="bottom">
+    <div class="btn" onclick="window.location.href='index.html'">
+      <span class="bi">←</span>もどる
+    </div>
+    <div class="btn" onclick="alert('スマホのスクショで撮ってね！')">
+      <span class="bi">📸</span>写真を撮る
+    </div>
   </div>
 </div>
 
 <script>
-// ── 2D花火エフェクト ──
+// ══════════════════════════════════════════════════
+//  2D パーティクル エフェクト
+// ══════════════════════════════════════════════════
 const fxCanvas = document.getElementById('fxCanvas');
 fxCanvas.width = window.innerWidth;
 fxCanvas.height = window.innerHeight;
 const fx2d = fxCanvas.getContext('2d');
 
+const FW_COLORS = ['#ff4444','#ff8800','#ffee00','#44ff88','#4488ff','#cc44ff','#ff88cc','#44ffdd'];
+const particles2D = [];
+
+function spawnBurst(x, y, big) {
+  const color = FW_COLORS[Math.floor(Math.random() * FW_COLORS.length)];
+  const count = big ? 60 : 35;
+  for (let i = 0; i < count; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 1.5 + Math.random() * (big ? 7 : 4);
+    particles2D.push({
+      x, y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      color,
+      life: 1.0,
+      decay: 0.012 + Math.random() * 0.018,
+      size: 2 + Math.random() * (big ? 4 : 2.5),
+    });
+  }
+  playWhistle();
+  setTimeout(() => playBoom(big ? 1.0 : 0.6), 420);
+}
+
+function renderFX() {
+  fx2d.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
+  for (let i = particles2D.length - 1; i >= 0; i--) {
+    const p = particles2D[i];
+    p.x += p.vx; p.y += p.vy;
+    p.vy += 0.12;
+    p.vx *= 0.97; p.vy *= 0.97;
+    p.life -= p.decay;
+    if (p.life <= 0) { particles2D.splice(i, 1); continue; }
+    fx2d.globalAlpha = p.life;
+    fx2d.fillStyle = p.color;
+    fx2d.beginPath();
+    fx2d.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    fx2d.fill();
+  }
+  fx2d.globalAlpha = 1;
+}
+
+// ══════════════════════════════════════════════════
+//  Web Audio（音量 30%）
+// ══════════════════════════════════════════════════
 let audioCtx = null;
 function getAudio() {
-  if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
-  if(audioCtx.state==='suspended') audioCtx.resume();
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
   return audioCtx;
 }
-function playBoom(vol) {
-  try {
-    const ctx = getAudio();
-    const sr = ctx.sampleRate;
-    const n = Math.floor(sr*0.5);
-    const buf = ctx.createBuffer(1,n,sr);
-    const d = buf.getChannelData(0);
-    for(let i=0;i<n;i++) d[i]=(Math.random()*2-1)*Math.exp(-i/(n*0.12));
-    const src = ctx.createBufferSource();
-    src.buffer = buf;
-    const g = ctx.createGain();
-    g.gain.setValueAtTime(vol||0.3, ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+0.5);
-    src.connect(g); g.connect(ctx.destination);
-    src.start();
-  } catch(e){}
-}
+
 function playWhistle() {
   try {
     const ctx = getAudio();
     const osc = ctx.createOscillator();
     const g = ctx.createGain();
     osc.connect(g); g.connect(ctx.destination);
-    osc.type='sine';
+    osc.type = 'sine';
     osc.frequency.setValueAtTime(300, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(1500, ctx.currentTime+0.45);
-    g.gain.setValueAtTime(0.1, ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+0.45);
-    osc.start(ctx.currentTime); osc.stop(ctx.currentTime+0.45);
-  } catch(e){}
+    osc.frequency.exponentialRampToValueAtTime(1500, ctx.currentTime + 0.45);
+    g.gain.setValueAtTime(0.03, ctx.currentTime);          // 30% of 0.1
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
+    osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.45);
+  } catch(e) {}
 }
 
-const FW_COLORS_2D = ['#ff4444','#ff8800','#ffee00','#44ff88','#4488ff','#cc44ff','#ff88cc','#44ffdd'];
-const particles2D = [];
-
-function spawnBurst(x, y, big) {
-  const color = FW_COLORS_2D[Math.floor(Math.random()*FW_COLORS_2D.length)];
-  const count = big ? 70 : 40;
-  const maxSpeed = big ? 8 : 5;
-  for(let i=0;i<count;i++){
-    const angle = Math.random()*Math.PI*2;
-    const speed = 1.5 + Math.random()*maxSpeed;
-    particles2D.push({
-      x, y,
-      vx: Math.cos(angle)*speed,
-      vy: Math.sin(angle)*speed,
-      color,
-      life: 1.0,
-      decay: 0.012 + Math.random()*0.018,
-      size: 2 + Math.random()*(big?4:2.5)
-    });
-  }
-  playWhistle();
-  setTimeout(() => playBoom(big ? 0.4 : 0.25), 420);
+function playBoom(vol) {
+  try {
+    const ctx = getAudio();
+    const sr = ctx.sampleRate;
+    const n = Math.floor(sr * 0.45);
+    const buf = ctx.createBuffer(1, n, sr);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (n * 0.12));
+    const src = ctx.createBufferSource();
+    const g = ctx.createGain();
+    src.buffer = buf;
+    g.gain.setValueAtTime(vol * 0.3, ctx.currentTime);    // 30%音量
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
+    src.connect(g); g.connect(ctx.destination);
+    src.start();
+  } catch(e) {}
 }
 
-function renderFX() {
-  fx2d.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
-  for(let i=particles2D.length-1; i>=0; i--){
-    const p = particles2D[i];
-    p.x += p.vx; p.y += p.vy;
-    p.vy += 0.13; // 重力
-    p.vx *= 0.97; p.vy *= 0.97; // 空気抵抗
-    p.life -= p.decay;
-    if(p.life<=0){ particles2D.splice(i,1); continue; }
-    fx2d.globalAlpha = p.life;
-    fx2d.fillStyle = p.color;
-    fx2d.beginPath();
-    fx2d.arc(p.x, p.y, p.size, 0, Math.PI*2);
-    fx2d.fill();
-  }
-  fx2d.globalAlpha = 1;
+// ══════════════════════════════════════════════════
+//  Three.js
+// ══════════════════════════════════════════════════
+const canvas = document.getElementById('arCanvas');
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setClearColor(0x000000, 0);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(
+  60, window.innerWidth / window.innerHeight, 0.1, 100
+);
+camera.position.set(0, 0, 0);
+
+scene.add(new THREE.AmbientLight(0xffffff, 2.5));
+const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+dirLight.position.set(1, 2, 1);
+scene.add(dirLight);
+
+// ══════════════════════════════════════════════════
+//  カメラ背景（スマホカメラ映像）
+// ══════════════════════════════════════════════════
+navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+  .then(stream => {
+    document.getElementById('bgVideo').srcObject = stream;
+    document.getElementById('arSub').textContent = 'スマホを動かして作品を見つけよう';
+  })
+  .catch(() => {
+    document.getElementById('arSub').textContent = 'カメラの許可が必要です';
+  });
+
+// ══════════════════════════════════════════════════
+//  3D → スクリーン座標変換
+// ══════════════════════════════════════════════════
+function worldToScreen(worldPos) {
+  const v = worldPos.clone().project(camera);
+  return {
+    x: (v.x * 0.5 + 0.5) * window.innerWidth,
+    y: (-v.y * 0.5 + 0.5) * window.innerHeight,
+    // NDC: z<1 かつ x,y が画面内 → カメラ前方にある
+    inFront: v.z < 1 && Math.abs(v.x) < 1.3 && Math.abs(v.y) < 1.3,
+  };
 }
 
-// Firebase設定
+// ══════════════════════════════════════════════════
+//  Firebase
+// ══════════════════════════════════════════════════
 const firebaseConfig = {
   apiKey: "AIzaSyDGlQeMC6iJzWAB16teP_5oC2FeBcgZxmA",
   authDomain: "hanabi-ar-1754a.firebaseapp.com",
@@ -147,320 +254,373 @@ const firebaseConfig = {
   projectId: "hanabi-ar-1754a",
   storageBucket: "hanabi-ar-1754a.firebasestorage.app",
   messagingSenderId: "861479696200",
-  appId: "1:861479696200:web:393add8997cf25affd657d"
+  appId: "1:861479696200:web:393add8997cf25affd657d",
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-// Three.js
-const canvas = document.getElementById('arCanvas');
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
-const renderer = new THREE.WebGLRenderer({canvas, alpha:true, antialias:true});
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(window.devicePixelRatio);
-renderer.setClearColor(0x000000, 0);
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 1000);
-camera.position.set(0, 0, 3);
-camera.lookAt(0, 0, 0);
-scene.add(new THREE.AmbientLight(0xffffff, 2));
-
-// カメラ起動
-navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}})
-  .then(stream => {
-    document.getElementById('bgVideo').srcObject = stream;
-    document.getElementById('arSub').textContent = 'カメラ起動！花火写真に向けよう';
-  })
-  .catch(() => {
-    document.getElementById('arSub').textContent = 'カメラの許可が必要です';
-  });
-
-// 作品を配置
-const works = [];
+// ══════════════════════════════════════════════════
+//  作品管理
+// ══════════════════════════════════════════════════
+const WORK_RADIUS = 3.5;  // ユーザー周辺の球半径
+const workObjects = [];   // {group, worldPos, scaleAnim, targetScale, ...}
 const addedIds = new Set();
 
-function makeCanvasTexture(color, emoji, label) {
+// Canvas テクスチャ生成（絵文字・名前付き）
+function makeCanvasTex(color, emoji, name) {
   const cv = document.createElement('canvas');
-  cv.width = 256; cv.height = 256;
+  cv.width = 256; cv.height = 300;
   const ctx = cv.getContext('2d');
   ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.roundRect(0,0,256,256,32);
-  ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,0.2)';
-  ctx.beginPath();
-  ctx.roundRect(12,12,232,232,24);
-  ctx.fill();
-  ctx.font = '80px serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(emoji, 128, 100);
+  ctx.beginPath(); ctx.roundRect(0, 0, 256, 256, 32); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.18)';
+  ctx.beginPath(); ctx.roundRect(12, 12, 232, 232, 24); ctx.fill();
+  ctx.font = '90px serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(emoji || '🎆', 128, 110);
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.beginPath(); ctx.roundRect(0, 262, 256, 38, 8); ctx.fill();
   ctx.fillStyle = '#fff';
-  ctx.font = 'bold 20px sans-serif';
-  ctx.fillText(label, 128, 195);
+  ctx.font = '18px sans-serif';
+  ctx.fillText(name || 'さくひん', 128, 285);
   return new THREE.CanvasTexture(cv);
 }
 
-function addWork(work) {
-  if(addedIds.has(work.id)) return;
-  addedIds.add(work.id);
-
-  const angle = addedIds.size * (Math.PI * 2 / 8);
-  const r = 1.2;
-  const x = Math.cos(angle) * r;
-  const y = Math.sin(angle) * r * 0.6;
-
-  let mesh;
-  if(work.type === 'canvas') {
-    const tex = makeCanvasTexture(work.color, work.emoji, work.label);
-    const geo = new THREE.PlaneGeometry(0.7, 0.7);
-    const mat = new THREE.MeshBasicMaterial({map:tex, transparent:true, side:THREE.DoubleSide});
-    mesh = new THREE.Mesh(geo, mat);
-  } else if(work.type === 'png' && work.url) {
-    // HTMLのimgタグをARキャンバスに重ねて表示
-    const imgEl = document.createElement('img');
-    imgEl.src = work.url;
-    const cx = window.innerWidth/2  + x * 120;
-    const cy = window.innerHeight/2 - y * 120;
-    const baseLeft = cx - 60;
-    const baseTop  = cy - 60;
-
-    imgEl.className = 'ar-work-overlay';
-    imgEl.dataset.baseX  = baseLeft;
-    imgEl.dataset.baseY  = baseTop;
-    imgEl.dataset.workId = work.id;
-    imgEl.dataset.height = 120;
-    imgEl.style.cssText = `
-      position:fixed;
-      width:120px;height:120px;
-      object-fit:contain;
-      border-radius:12px;
-      border:2px solid rgba(255,255,255,0.3);
-      pointer-events:all;
-      z-index:5;
-      left:${baseLeft}px;
-      top:${baseTop}px;
-      cursor:pointer;
-    `;
-
-    // タップでズーム
-    imgEl.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const isZoomed = imgEl.dataset.zoomed === '1';
-      if(isZoomed) {
-        imgEl.style.width  = '120px';
-        imgEl.style.height = '120px';
-        imgEl.style.zIndex = '5';
-        imgEl.dataset.zoomed = '0';
-      } else {
-        imgEl.style.width  = '260px';
-        imgEl.style.height = '260px';
-        imgEl.style.zIndex = '50';
-        imgEl.dataset.zoomed = '1';
-      }
-    });
-
-    // 名前タグ
-    const nameEl = document.createElement('div');
-    nameEl.id = 'name_' + work.id;
-    nameEl.textContent = work.name || 'なまえなし';
-    nameEl.style.cssText = `
-      position:fixed;
-      left:${baseLeft}px;
-      top:${baseTop + 125}px;
-      width:120px;
-      text-align:center;
-      font-size:11px;color:#fff;
-      background:rgba(0,0,0,0.6);
-      border-radius:10px;padding:2px 6px;
-      pointer-events:none;z-index:5;
-    `;
-
-    document.body.appendChild(imgEl);
-    document.body.appendChild(nameEl);
-
-    // ふわふわアニメ
-    let ft = Math.random()*Math.PI*2;
-    setInterval(() => {
-      ft += 0.03;
-      const offset = Math.sin(ft) * 8;
-      const curLeft = parseFloat(imgEl.style.left);
-      imgEl.dataset.baseY = (cy - 60 + offset);
-    }, 16);
-
-    document.getElementById('arCount').textContent = addedIds.size + ' 作品';
-    return;
-  } else if(work.type === 'glb' && work.url) {
-    // model-viewerでGLBをHTMLオーバーレイ表示
-    const cx2 = window.innerWidth/2 + x * 120;
-    const cy2 = window.innerHeight/2 - y * 120;
-
-    const mv = document.createElement('model-viewer');
-    mv.setAttribute('src', work.url);
-    mv.setAttribute('auto-rotate', '');
-    mv.setAttribute('camera-controls', '');
-    mv.style.cssText = `
-      position:fixed;
-      left:${cx2-75}px;
-      top:${cy2-75}px;
-      width:150px;height:150px;
-      pointer-events:none;
-      z-index:5;
-      background:transparent;
-      --poster-color:transparent;
-    `;
-    document.body.appendChild(mv);
-
-    // 名前タグ
-    const nameEl2 = document.createElement('div');
-    nameEl2.textContent = work.name || 'なまえなし';
-    nameEl2.style.cssText = `
-      position:fixed;
-      left:${cx2-75}px;top:${cy2+80}px;
-      width:150px;text-align:center;
-      font-size:11px;color:#fff;
-      background:rgba(0,0,0,0.6);border-radius:10px;
-      padding:2px 6px;pointer-events:none;z-index:5;
-    `;
-    document.body.appendChild(nameEl2);
-
-    // ふわふわアニメ
-    let ft2 = Math.random()*Math.PI*2;
-    const baseTop2 = cy2 - 75;
-    setInterval(() => {
-      ft2 += 0.03;
-      const offset = Math.sin(ft2) * 8;
-      mv.style.top = (baseTop2 + offset) + 'px';
-      nameEl2.style.top = (baseTop2 + 155 + offset) + 'px';
-    }, 16);
-
-    document.getElementById('arCount').textContent = addedIds.size + ' 作品';
-    return;
-  }
-
-  if(mesh) {
-    mesh.position.set(x, y, 0);
-    scene.add(mesh);
-    works.push({mesh, baseY: y, phase: Math.random()*Math.PI*2});
-  }
-  document.getElementById('arCount').textContent = addedIds.size + ' 作品';
-
-  // 新しい作品が現れたとき花火でお祝い
-  const cx = window.innerWidth/2 + x*120;
-  const cy = window.innerHeight/2 - y*120;
-  setTimeout(() => spawnBurst(cx, cy, true), 200);
+// PNG → Canvas テクスチャ（名前付き）
+function makePngTex(url, name, cb) {
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = () => {
+    const cv = document.createElement('canvas');
+    cv.width = 256; cv.height = 300;
+    const ctx = cv.getContext('2d');
+    const s = Math.min(img.width, img.height);
+    ctx.drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, 256, 256);
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.beginPath(); ctx.roundRect(0, 262, 256, 38, 8); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = '18px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(name || 'さくひん', 128, 285);
+    cb(new THREE.CanvasTexture(cv));
+  };
+  img.onerror = () => cb(null);
+  img.src = url;
 }
 
-// Firebaseから読み込む
-db.ref('works').on('child_added', (snap) => {
-  const work = snap.val();
-  work.id = snap.key;
-  addWork(work);
+// 作品インデックスから世界座標を算出
+function getWorkPos(idx) {
+  const theta = (idx % 8) * (Math.PI * 2 / 8);
+  const yOff  = Math.floor(idx / 8) * 0.7;
+  return new THREE.Vector3(
+    Math.sin(theta) * WORK_RADIUS,
+    -0.2 + yOff,
+    -Math.cos(theta) * WORK_RADIUS
+  );
+}
+
+// Three.js Group を scene に登録
+function registerWork(group, worldPos) {
+  group.position.copy(worldPos);
+  group.lookAt(0, 0, 0);   // 常にカメラ方向を向く
+  group.scale.setScalar(0); // 初期は非表示
+  group.visible = false;
+  scene.add(group);
+
+  const w = {
+    group,
+    worldPos: worldPos.clone(),
+    scaleAnim: 0,
+    targetScale: 0,
+    floatPhase: Math.random() * Math.PI * 2,
+    floatSpeed: 0.4 + Math.random() * 0.4,
+    baseY: worldPos.y,
+  };
+  workObjects.push(w);
+  document.getElementById('arCount').textContent = workObjects.length + ' 作品';
+
+  // すでに「表示中」なら即出現させる
+  if (showState === 'visible') {
+    w.targetScale = 1;
+    const sp = worldToScreen(worldPos);
+    spawnBurst(
+      sp.inFront ? sp.x : window.innerWidth  / 2 + (Math.random() - 0.5) * 300,
+      sp.inFront ? sp.y : window.innerHeight / 2 + (Math.random() - 0.5) * 300,
+      true
+    );
+  }
+}
+
+function addWork(work) {
+  if (addedIds.has(work.id)) return;
+  addedIds.add(work.id);
+  const pos = getWorkPos(workObjects.length);
+
+  if (work.type === 'canvas') {
+    const tex = makeCanvasTex(work.color || '#ff6b00', work.emoji || '🎆', work.name);
+    const geo = new THREE.PlaneGeometry(0.8, 0.8 * (300 / 256));
+    const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide, depthWrite: false });
+    const g = new THREE.Group();
+    g.add(new THREE.Mesh(geo, mat));
+    registerWork(g, pos);
+
+  } else if (work.type === 'png' && work.url) {
+    makePngTex(work.url, work.name, tex => {
+      if (!tex) return;
+      const geo = new THREE.PlaneGeometry(0.8, 0.8 * (300 / 256));
+      const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide, depthWrite: false });
+      const g = new THREE.Group();
+      g.add(new THREE.Mesh(geo, mat));
+      registerWork(g, pos);
+    });
+
+  } else if (work.type === 'glb' && work.url) {
+    const loader = new THREE.GLTFLoader();
+    loader.load(work.url, gltf => {
+      const model = gltf.scene;
+      const box = new THREE.Box3().setFromObject(model);
+      const sz  = box.getSize(new THREE.Vector3());
+      model.scale.setScalar(0.65 / Math.max(sz.x, sz.y, sz.z));
+      const g = new THREE.Group();
+      g.add(model);
+      registerWork(g, pos);
+    }, undefined, () => {});
+  }
+}
+
+db.ref('works').on('child_added', snap => {
+  const w = snap.val(); w.id = snap.key;
+  addWork(w);
 });
 
-// 最初から全部表示
-document.getElementById('arStatus').textContent = '✨ タップして花火を打ち上げよう！';
-document.getElementById('arStatus').classList.add('found');
+// ══════════════════════════════════════════════════
+//  出現・消滅アニメーション制御
+// ══════════════════════════════════════════════════
+let showState = 'hidden'; // 'hidden' | 'showing' | 'visible' | 'hiding'
 
-// ── ジャイロ設定 ──
-let gyroAlpha = 0, gyroBeta = 0;
-let baseAlpha = null;
+function burstPosFor(w) {
+  const sp = worldToScreen(w.worldPos);
+  return {
+    x: sp.inFront ? sp.x : window.innerWidth  / 2 + (Math.random() - 0.5) * 300,
+    y: sp.inFront ? sp.y : window.innerHeight / 2 + (Math.random() - 0.5) * 300,
+  };
+}
+
+function revealAll() {
+  if (showState === 'showing' || showState === 'visible') return;
+  showState = 'showing';
+  setStatus('🎆 作品が出現中…');
+
+  if (workObjects.length === 0) {
+    showState = 'visible';
+    setStatus('✨ もう一度タップすると消えるよ！');
+    return;
+  }
+  workObjects.forEach((w, i) => {
+    setTimeout(() => {
+      w.targetScale = 1;
+      const bp = burstPosFor(w);
+      spawnBurst(bp.x, bp.y, true);
+      if (i === workObjects.length - 1) {
+        setTimeout(() => {
+          showState = 'visible';
+          setStatus('✨ もう一度タップすると消えるよ！');
+        }, 700);
+      }
+    }, i * 600);
+  });
+}
+
+function hideAll() {
+  if (showState === 'hiding' || showState === 'hidden') return;
+  showState = 'hiding';
+  setStatus('💨 消えていく…');
+
+  if (workObjects.length === 0) {
+    showState = 'hidden';
+    setStatus('🎆 タップして作品を出現させよう！');
+    return;
+  }
+  workObjects.forEach((w, i) => {
+    setTimeout(() => {
+      w.targetScale = 0;
+      const bp = burstPosFor(w);
+      spawnBurst(bp.x, bp.y, false);
+      if (i === workObjects.length - 1) {
+        setTimeout(() => {
+          showState = 'hidden';
+          setStatus('🎆 タップして作品を出現させよう！');
+        }, 800);
+      }
+    }, i * 400);
+  });
+}
+
+function setStatus(msg) {
+  document.getElementById('arStatus').textContent = msg;
+}
+
+// ══════════════════════════════════════════════════
+//  ジャイロセンサー（空間固定）
+// ══════════════════════════════════════════════════
+let useGyro = false;
+const gyroZee   = new THREE.Vector3(0, 0, 1);
+const gyroEuler = new THREE.Euler();
+const gyroQ0    = new THREE.Quaternion();
+const gyroQ1    = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
 
 function startGyro() {
-  window.addEventListener('deviceorientation', (e) => {
-    if(e.alpha === null) return;
-    if(baseAlpha === null) baseAlpha = e.alpha;
-    gyroAlpha = ((e.alpha - baseAlpha) + 360) % 360;
-    gyroBeta  = e.beta || 0;
+  useGyro = true;
+  window.addEventListener('deviceorientation', e => {
+    if (e.alpha === null) return;
+    // コンパスヘッディング（iOS: webkitCompassHeading / Android: 360-alpha）
+    const heading = e.webkitCompassHeading != null
+      ? THREE.MathUtils.degToRad(e.webkitCompassHeading)
+      : THREE.MathUtils.degToRad(360 - e.alpha);
+
+    gyroEuler.set(
+      THREE.MathUtils.degToRad(e.beta),
+      THREE.MathUtils.degToRad(e.alpha),
+      THREE.MathUtils.degToRad(-e.gamma),
+      'YXZ'
+    );
+    camera.quaternion.setFromEuler(gyroEuler);
+    camera.quaternion.multiply(gyroQ1);
+    camera.quaternion.multiply(gyroQ0.setFromAxisAngle(gyroZee, -heading));
   }, true);
+
+  setStatus('🎆 タップして作品を出現させよう！');
+  document.getElementById('arSub').textContent = 'スマホを動かして作品を見つけよう';
 }
 
-if(typeof DeviceOrientationEvent !== 'undefined' &&
-   typeof DeviceOrientationEvent.requestPermission === 'function') {
-  // iPhone：許可ボタンを表示
-  const gyroBtn = document.createElement('div');
-  gyroBtn.textContent = '🌀 センサーを許可';
-  gyroBtn.style.cssText = `
-    position:fixed;bottom:110px;left:50%;transform:translateX(-50%);
-    padding:10px 24px;border-radius:20px;
-    background:rgba(255,200,60,0.2);border:1px solid rgba(255,200,60,0.5);
-    color:#ffcc44;font-size:13px;cursor:pointer;z-index:200;
-    font-family:'Hiragino Kaku Gothic ProN',sans-serif;
-    pointer-events:all;
-  `;
-  gyroBtn.onclick = () => {
-    DeviceOrientationEvent.requestPermission().then(state => {
-      if(state === 'granted') {
-        startGyro();
-        gyroBtn.remove();
-      }
+function requestGyro() {
+  DeviceOrientationEvent.requestPermission()
+    .then(state => {
+      document.getElementById('gyroPrompt').style.display = 'none';
+      if (state === 'granted') startGyro();
+      else setStatus('🎆 タップして作品を出現させよう！');
+    })
+    .catch(() => {
+      document.getElementById('gyroPrompt').style.display = 'none';
+      setStatus('🎆 タップして作品を出現させよう！');
     });
-  };
-  document.body.appendChild(gyroBtn);
-} else {
+}
+document.getElementById('gyroBtn').onclick = requestGyro;
+
+if (typeof DeviceOrientationEvent !== 'undefined' &&
+    typeof DeviceOrientationEvent.requestPermission === 'function') {
+  // iPhone: 許可ダイアログを表示
+  document.getElementById('gyroPrompt').style.display = 'flex';
+} else if (typeof DeviceOrientationEvent !== 'undefined') {
+  // Android: 自動的にジャイロ開始
   startGyro();
+} else {
+  // PC: マウスドラッグで操作
+  setStatus('🎆 タップして作品を出現させよう！');
 }
 
-// タップで花火打ち上げ！
-document.getElementById('arCanvas').style.pointerEvents = 'all';
-document.getElementById('arCanvas').addEventListener('click', (e) => {
-  try { getAudio().resume(); } catch(err){}
-  spawnBurst(e.clientX, e.clientY, false);
-  document.getElementById('arStatus').textContent = '🎆 花火！';
-  setTimeout(() => {
-    document.getElementById('arStatus').textContent = '✨ タップして花火を打ち上げよう！';
-  }, 1200);
+// ══════════════════════════════════════════════════
+//  マウス / タッチドラッグ（PC・ジャイロ無し時のフォールバック）
+// ══════════════════════════════════════════════════
+let mouseDown = false, mouseMoved = false, lastMX = 0, lastMY = 0;
+let touchMoved = false, lastTX = 0, lastTY = 0;
+let yaw = 0, pitch = 0;
+
+canvas.addEventListener('mousedown', e => {
+  mouseDown = true; mouseMoved = false;
+  lastMX = e.clientX; lastMY = e.clientY;
 });
+canvas.addEventListener('mousemove', e => {
+  if (!mouseDown) return;
+  mouseMoved = true;
+  yaw   += (e.clientX - lastMX) * 0.005;
+  pitch += (e.clientY - lastMY) * 0.003;
+  pitch = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, pitch));
+  lastMX = e.clientX; lastMY = e.clientY;
+});
+canvas.addEventListener('mouseup', () => { mouseDown = false; });
 
-// HTMLオーバーレイの作品を向きに合わせて動かす
-function updateOverlayPositions() {
-  const yawDeg = gyroAlpha;
-  const pitchDeg = gyroBeta - 90; // 水平が0
+canvas.addEventListener('touchstart', e => {
+  touchMoved = false;
+  lastTX = e.touches[0].clientX; lastTY = e.touches[0].clientY;
+}, { passive: true });
+canvas.addEventListener('touchmove', e => {
+  if (useGyro) return; // ジャイロ有効時はドラッグ不要
+  touchMoved = true;
+  yaw   += (e.touches[0].clientX - lastTX) * 0.005;
+  pitch += (e.touches[0].clientY - lastTY) * 0.003;
+  pitch = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, pitch));
+  lastTX = e.touches[0].clientX; lastTY = e.touches[0].clientY;
+}, { passive: true });
 
-  // 全HTMLオーバーレイ作品を取得して位置を更新
-  document.querySelectorAll('.ar-work-overlay').forEach(el => {
-    const baseX = parseFloat(el.dataset.baseX);
-    const baseY = parseFloat(el.dataset.baseY);
+// ══════════════════════════════════════════════════
+//  タップ処理（出現 / 消滅トグル）
+// ══════════════════════════════════════════════════
+let lastTapMs = 0;
 
-    // ジャイロのずれを位置に反映
-    const offsetX = -yawDeg * 5;
-    const offsetY = pitchDeg * 5;
+function handleTap() {
+  const now = Date.now();
+  if (now - lastTapMs < 400) return; // 連続タップ防止
+  lastTapMs = now;
+  try { getAudio().resume(); } catch(e) {}
 
-    const newLeft = baseX + offsetX;
-    const newTop  = baseY + offsetY;
-    el.style.left = newLeft + 'px';
+  if (showState === 'hidden'  || showState === 'hiding')   revealAll();
+  else if (showState === 'visible' || showState === 'showing') hideAll();
+}
 
-    // 名前タグも同様に
-    const nameEl = document.getElementById('name_' + el.dataset.workId);
-    if(nameEl) {
-      nameEl.style.left = newLeft + 'px';
-      nameEl.style.top  = (newTop + parseInt(el.dataset.height || 120) + 5) + 'px';
+canvas.addEventListener('click',    e => { if (!mouseMoved)  handleTap(); });
+canvas.addEventListener('touchend', e => { if (!touchMoved)  handleTap(); }, { passive: true });
+
+// ══════════════════════════════════════════════════
+//  レンダリングループ
+// ══════════════════════════════════════════════════
+let t = 0, lastFT = performance.now();
+
+function animate(now) {
+  requestAnimationFrame(animate);
+  const dt = Math.min((now - lastFT) / 1000, 0.05);
+  lastFT = now;
+  t += dt;
+
+  // ジャイロなし時はマウス/タッチでカメラ回転
+  if (!useGyro) {
+    camera.rotation.order = 'YXZ';
+    camera.rotation.y = yaw;
+    camera.rotation.x = pitch;
+  }
+
+  workObjects.forEach(w => {
+    // スケールのイージングアニメーション
+    const diff = w.targetScale - w.scaleAnim;
+    w.scaleAnim += diff * 0.08;
+    if (Math.abs(diff) < 0.002) w.scaleAnim = w.targetScale;
+
+    const s = w.scaleAnim;
+    w.group.visible = s > 0.01;
+    if (s > 0.01) {
+      w.group.scale.setScalar(s);
+      // ふわふわ浮遊
+      w.group.position.y = w.baseY + Math.sin(t * w.floatSpeed + w.floatPhase) * 0.1;
+      // 常にカメラを向くように更新
+      w.group.lookAt(0, 0, 0);
     }
   });
-}
 
-// レンダリング
-let t = 0;
-function animate() {
-  requestAnimationFrame(animate);
-  t += 0.02;
-  works.forEach(w => {
-    if(w.mesh) w.mesh.position.y = w.baseY + Math.sin(t + w.phase) * 0.06;
-  });
-  updateOverlayPositions();
   renderFX();
   renderer.render(scene, camera);
 }
-animate();
+animate(performance.now());
 
+// ══════════════════════════════════════════════════
+//  リサイズ
+// ══════════════════════════════════════════════════
 window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
-  canvas.width = window.innerWidth;
+  canvas.width  = window.innerWidth;
   canvas.height = window.innerHeight;
-  fxCanvas.width = window.innerWidth;
+  fxCanvas.width  = window.innerWidth;
   fxCanvas.height = window.innerHeight;
 });
 </script>
