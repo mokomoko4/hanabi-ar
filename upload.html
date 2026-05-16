@@ -426,14 +426,9 @@ async function uploadWork() {
   document.getElementById('progressText').textContent = 'ログイン確認中…';
 
   try {
-    // 匿名ログイン完了を待つ（最大10秒）
+    // 匿名ログインを確実に完了させる
     if (!auth.currentUser) {
-      await new Promise((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error('ログインがタイムアウトしました。ページを再読み込みしてお試しください。')), 10000);
-        const unsub = auth.onAuthStateChanged(user => {
-          if (user) { clearTimeout(timer); unsub(); resolve(); }
-        });
-      });
+      await auth.signInAnonymously();
     }
 
     // Storageにアップロード
