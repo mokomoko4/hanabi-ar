@@ -423,24 +423,26 @@ async function uploadWork() {
 
   document.getElementById('progressWrap').classList.add('show');
   document.getElementById('progressBar').style.width = '0%';
-  document.getElementById('progressText').textContent = 'ファイルを送っています…';
+  document.getElementById('progressText').textContent = 'ログイン確認中…';
 
   try {
-    // 匿名ログイン完了を待つ
+    // 匿名ログイン完了を待つ（最大10秒）
     if (!auth.currentUser) {
-      await new Promise(resolve => {
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('ログインがタイムアウトしました。ページを再読み込みしてお試しください。')), 10000);
         const unsub = auth.onAuthStateChanged(user => {
-          if (user) { unsub(); resolve(); }
+          if (user) { clearTimeout(timer); unsub(); resolve(); }
         });
       });
     }
 
     // Storageにアップロード
+    document.getElementById('progressText').textContent = 'ファイルを送っています…';
     const ext = selectedFile.name.split('.').pop();
     const filename = `works/${Date.now()}_${name}.${ext}`;
     const ref = storage.ref(filename);
-    const metadata = { contentType: selectedFile.type };
-    const task = ref.put(selectedFile, metadata);
+    const contentType = selectedFile.type || 'image/png';
+    const task = ref.put(selectedFile, { contentType });
 
     // 進捗表示
     task.on('state_changed', (snap) => {
