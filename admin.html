@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>管理画面</title>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
 <style>
@@ -84,10 +85,11 @@ body{font-family:'Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif;backgroun
 <!-- ログイン -->
 <div class="login-wrap" id="loginWrap">
   <div class="login-title">🔐 管理画面</div>
-  <div class="login-sub">運営用パスワードを入力してください</div>
+  <div class="login-sub">メールアドレスとパスワードを入力してください</div>
+  <input class="pw-input" id="emailInput" type="email" placeholder="メールアドレス" style="letter-spacing:0;" onkeydown="if(event.key==='Enter')checkPw()">
   <input class="pw-input" id="pwInput" type="password" placeholder="パスワード" onkeydown="if(event.key==='Enter')checkPw()">
   <button class="login-btn" onclick="checkPw()">ログイン</button>
-  <div class="login-err" id="loginErr">パスワードが違います</div>
+  <div class="login-err" id="loginErr">メールアドレスまたはパスワードが違います</div>
 </div>
 
 <!-- 管理コンテンツ -->
@@ -106,21 +108,6 @@ body{font-family:'Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif;backgroun
 </div>
 
 <script>
-const ADMIN_PW = 'hanabi';
-
-function checkPw() {
-  const val = document.getElementById('pwInput').value;
-  if (val === ADMIN_PW) {
-    document.getElementById('loginWrap').style.display = 'none';
-    document.getElementById('adminWrap').classList.add('show');
-    initAdmin();
-  } else {
-    document.getElementById('loginErr').classList.add('show');
-    document.getElementById('pwInput').value = '';
-    document.getElementById('pwInput').focus();
-  }
-}
-
 firebase.initializeApp({
   apiKey: "AIzaSyDGlQeMC6iJzWAB16teP_5oC2FeBcgZxmA",
   authDomain: "hanabi-ar-1754a.firebaseapp.com",
@@ -130,8 +117,25 @@ firebase.initializeApp({
   messagingSenderId: "861479696200",
   appId: "1:861479696200:web:393add8997cf25affd657d"
 });
+const auth = firebase.auth();
 const db = firebase.database();
 const storage = firebase.storage();
+
+async function checkPw() {
+  const email = document.getElementById('emailInput').value.trim();
+  const pw = document.getElementById('pwInput').value;
+  if (!email || !pw) return;
+  try {
+    await auth.signInWithEmailAndPassword(email, pw);
+    document.getElementById('loginWrap').style.display = 'none';
+    document.getElementById('adminWrap').classList.add('show');
+    initAdmin();
+  } catch (e) {
+    document.getElementById('loginErr').classList.add('show');
+    document.getElementById('pwInput').value = '';
+    document.getElementById('pwInput').focus();
+  }
+}
 
 function initAdmin() {
   db.ref('works').on('value', snap => {

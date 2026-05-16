@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>さくひんをアップする</title>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
 <style>
@@ -260,8 +261,11 @@ const firebaseConfig = {
 };
 
 firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
 const db = firebase.database();
 const storage = firebase.storage();
+
+auth.signInAnonymously().catch(err => console.error('auth:', err));
 
 let selectedFile = null;
 let selectedType = null;
@@ -422,11 +426,21 @@ async function uploadWork() {
   document.getElementById('progressText').textContent = 'ファイルを送っています…';
 
   try {
+    // 匿名ログイン完了を待つ
+    if (!auth.currentUser) {
+      await new Promise(resolve => {
+        const unsub = auth.onAuthStateChanged(user => {
+          if (user) { unsub(); resolve(); }
+        });
+      });
+    }
+
     // Storageにアップロード
     const ext = selectedFile.name.split('.').pop();
     const filename = `works/${Date.now()}_${name}.${ext}`;
     const ref = storage.ref(filename);
-    const task = ref.put(selectedFile);
+    const metadata = { contentType: selectedFile.type };
+    const task = ref.put(selectedFile, metadata);
 
     // 進捗表示
     task.on('state_changed', (snap) => {

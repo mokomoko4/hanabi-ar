@@ -1,0 +1,8 @@
+{
+  "rules": {
+    "works": {
+      ".read": true,
+      ".write": "auth != null"
+    }
+  }
+}

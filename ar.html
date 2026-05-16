@@ -6,6 +6,7 @@
 <title>花火AR</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
@@ -88,6 +89,7 @@ firebase.initializeApp({
   messagingSenderId:"861479696200",
   appId:"1:861479696200:web:393add8997cf25affd657d"
 });
+firebase.auth().signInAnonymously().catch(err => console.error('auth:', err));
 const db = firebase.database();
 
 let works = [];
